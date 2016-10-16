@@ -6,7 +6,7 @@ import tensorflow as tf
 
 from cs294_129 import plot
 from cs294_129.utils import get_mnist
-from cs294_129 import vae
+from cs294_129.vae import VariationalAutoEncoder
 
 
 IMG_DIM = 28
@@ -17,26 +17,25 @@ ARCHITECTURE = [IMG_DIM**2, # 784 pixels
                 # 50]
 # (and symmetrically back out again)
 
-HYPERPARAMS = {
-    "batch_size": 128,
-    "learning_rate": 5E-4,
-    "dropout": 0.9,
-    "lambda_l2_reg": 1E-5,
-    "nonlinearity": tf.nn.elu,
-    "squashing": tf.nn.sigmoid
-}
+BATCH_SIZE = 128
+LEARNING_RATE = 5e-4
+DROPOUT = 0.9
+LAMBDA_REG = 1e-5
+ACTIVATION = tf.nn.elu
+SQUASHING = tf.nn.sigmoid
 
 MAX_ITER = 2000#2**16
 MAX_EPOCHS = np.inf
 
 LOG_DIR = "./log"
-METAGRAPH_DIR = "./out"
-PLOTS_DIR = "./png"
+METAGRAPH_DIR = "./models"
+PLOTS_DIR = "./plots"
 
 
 def load_mnist():
     from tensorflow.examples.tutorials.mnist import input_data
     return input_data.read_data_sets("./mnist_data")
+
 
 def all_plots(model, mnist):
     if model.architecture[-1] == 2: # only works for 2-D latent
@@ -62,12 +61,14 @@ def all_plots(model, mnist):
     for i in range(10):
         plot.justMNIST(get_mnist(i, mnist), name=str(i), outdir=PLOTS_DIR)
 
+
 def plot_all_in_latent(model, mnist):
     names = ("train", "validation", "test")
     datasets = (mnist.train, mnist.validation, mnist.test)
     for name, dataset in zip(names, datasets):
         plot.plotInLatent(model, dataset.images, dataset.labels, name=name,
                           outdir=PLOTS_DIR)
+
 
 def interpolate_digits(model, mnist):
     imgs, labels = mnist.train.next_batch(100)
@@ -85,6 +86,7 @@ def plot_all_end_to_end(model, mnist):
         plot.plotSubset(model, x, x_reconstructed, n=10, name=name,
                         outdir=PLOTS_DIR)
 
+
 def morph_numbers(model, mnist, ns=None, n_per_morph=10):
     if not ns:
         import random
@@ -95,21 +97,29 @@ def morph_numbers(model, mnist, ns=None, n_per_morph=10):
     plot.morph(model, mus, n_per_morph=n_per_morph, outdir=PLOTS_DIR,
                name="morph_{}".format("".join(str(n) for n in ns)))
 
+
 def main(to_reload=None):
     mnist = load_mnist()
-
+    v = VariationalAutoEncoder(architecture=ARCHITECTURE,
+                               load_model=to_reload,
+                               save_model=True,
+                               log_dir="./log",
+                               batch_size=BATCH_SIZE,
+                               learning_rate=LEARNING_RATE,
+                               dropout=DROPOUT,
+                               lambda_l2_reg=LAMBDA_REG,
+                               activation=ACTIVATION,
+                               squashing=SQUASHING
+                               )
     if to_reload: # restore
-        v = vae.VAE(ARCHITECTURE, HYPERPARAMS, meta_graph=to_reload)
         print("Loaded!")
-
     else: # train
-        v = vae.VAE(ARCHITECTURE, HYPERPARAMS, log_dir=LOG_DIR)
-        v.train(mnist, max_iter=MAX_ITER, max_epochs=MAX_EPOCHS, cross_validate=False,
-                verbose=True, save=True, outdir=METAGRAPH_DIR, plots_outdir=PLOTS_DIR,
-                plot_latent_over_time=False)
+        v.train(mnist, max_iter=MAX_ITER, max_epochs=MAX_EPOCHS,
+                cross_validate=False, verbose=True, saver=True,
+                outdir=METAGRAPH_DIR, plots_outdir=PLOTS_DIR,
+                plot_latent_over_time=True)
         print("Trained!")
-
-    all_plots(v, mnist)
+    all_plots(v.autoencoder, mnist)
 
 
 if __name__ == "__main__":
@@ -124,5 +134,5 @@ if __name__ == "__main__":
     try:
         to_reload = sys.argv[1]
         main(to_reload=to_reload)
-    except(IndexError):
+    except IndexError:
         main()

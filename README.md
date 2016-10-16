@@ -59,17 +59,15 @@ export PYTHONPATH="...[File Path Here].../cs294-vae/src:$PYTHONPATH"
 
 
 ## Package Architecture
-Class
+Objects
 
-1. VAE
-Method: `encoder`, `decoder`, `train`
-2. DNN
-Method: `construct_nn`, `
+* `VariationalAutoEncoder` in `vae.py` 
+* `AutoEncoder` in `nn.py`
+* `FullyConnectedLayer` in `layers.py`
 
-Methods:
+Utility Functions
 
-1. Distribution 
-Method: `sampleGaussian`, `GaussianKLDivergence`
+* `sampleGaussian`, `GaussianKLDivergence` in `distribution.py`
 
 ## Reference
 [*Under the Hood of the Variational Autoencoder (in Prose and Code)*](http://blog.fastforwardlabs.com/post/149329060653/under-the-hood-of-the-variational-autoencoder-in).

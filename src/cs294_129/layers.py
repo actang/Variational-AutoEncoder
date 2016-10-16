@@ -34,13 +34,13 @@ class FullyConnectedLayer:
     """
     def __init__(self,
                  size,  # number of neurons on the layer
-                 scope="fc", # name for the layer type
-                 dropout=1., # 1 - probability of dropout (1 means no dropout)
-                 activation=tf.nn.elu # non-linearity activation function
+                 scope="fc",  # name for the layer type
+                 dropout=1.,  # 1 - probability of dropout (1 means no dropout)
+                 activation=tf.nn.elu  # non-linearity activation function
                  ):
         self.size = size
         self.scope = scope
-        self.dropout = dropout # keep_prob
+        self.dropout = dropout  # keep_prob
         self.activation = activation
 
     def __call__(self, x):
