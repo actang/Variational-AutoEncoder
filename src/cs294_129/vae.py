@@ -1,163 +1,150 @@
 from datetime import datetime
 import os
-import sys
-
-import numpy as np
+import re
 import tensorflow as tf
-
+from cs294_129.layers import FullyConnectedLayer
+from cs294_129.distribution import Distribution
 from cs294_129.autoencoder import AutoEncoder
-from cs294_129.distribution import sample_gaussian
-from cs294_129 import plot
 
 
-class VariationalAutoEncoder:
+class VariationalAutoEncoder(AutoEncoder):
     """
     Variational Autoencoder
-
+s
     see: Kingma & Welling - Auto-Encoding Variational Bayes
     (http://arxiv.org/abs/1312.6114)
     """
-    DEFAULTS = {
-        "batch_size": 128,
-        "learning_rate": 1E-3,
-        "dropout": 1.,
-        "lambda_l2_reg": 0.,
-        "nonlinearity": tf.nn.elu,
-        "squashing": tf.nn.sigmoid
-    }
-    RESTORE_KEY = "to_restore"
+    def __init__(self, architecture=None, load_model=None, save_model=True,
+                 log_dir="./log", batch_size=128, learning_rate=1e-3,
+                 dropout=1., lambda_l2_reg=0., activation=tf.nn.elu,
+                 squashing=tf.nn.sigmoid, distribution=Distribution("normal")):
+        # Inherit autoencoder
+        AutoEncoder.__init__(self, architecture=architecture,
+                             save_model=save_model, log_dir=log_dir,
+                             batch_size=batch_size, learning_rate=learning_rate,
+                             dropout=dropout, lambda_l2_reg=lambda_l2_reg,
+                             activation=activation, squashing=squashing,
+                             distribution=distribution)
 
-    def __init__(self,
-                 architecture=None,
-                 # Currently only support fully connected layer,
-                 # in the future architecture can be changed to a list of
-                 # tuples, which stores the layer type and neuron amount
-                 load_model=None,
-                 save_model=True,
-                 log_dir="./log",
-                 batch_size=128,
-                 learning_rate=1e-3,
-                 dropout=1.,
-                 lambda_l2_reg=0.,
-                 activation=tf.nn.elu,
-                 squashing=tf.nn.sigmoid):
+        # Initialize latent space distribution
+        self.z_mean = None
+        self.z_log_sigma = None
+        self.x_reconstructed_ = None
+        self.z_ = None
 
-        self.autoencoder = AutoEncoder(architecture, load_model,
-                                       batch_size, learning_rate,
-                                       dropout, lambda_l2_reg, activation,
-                                       squashing)
-        self.sesh = self.autoencoder.sesh
+        for handle in (self.x_in, self.dropout, self.z_mean,
+                       self.z_log_sigma, self.x_reconstructed, self.z_,
+                       self.x_reconstructed_, self.cost,
+                       self.global_step, self.train_op):
+            tf.add_to_collection("vae_parameters", handle)
 
-        if save_model:  # Tensorboard
-            self.logger = tf.train.SummaryWriter(log_dir, self.sesh.graph)
-
-    @property
-    def step(self):
-        """Train step"""
-        return self.autoencoder.global_step.eval(session=self.sesh)
-
-    def train(self, X,
-              max_iter=np.inf, max_epochs=np.inf,
-              cross_validate=True, verbose=True,
-              saver=True,
-              outdir="./models", plots_outdir="./plots",
-              plot_latent_over_time=False):
-
-        if saver:
-            saver = tf.train.Saver(tf.all_variables())
+        if load_model is not None:
+            # Load existing model
+            model_datetime, model_name = os.path.basename(load_model).\
+                split("_vae_")
+            self.datetime = "{}_reloaded".format(model_datetime)
+            *model_architecture, _ = re.split("_|-", model_name)
+            self.architecture = [int(n) for n in model_architecture]
+            meta_graph = os.path.abspath(load_model)
+            tf.train.import_meta_graph(meta_graph + ".meta").\
+                restore(self.sesh, meta_graph)
+            (self.x_in, self.dropout_, self.z_mean, self.z_log_sigma,
+             self.x_reconstructed, self.z_, self.x_reconstructed_,
+             self.cost, self.global_step,
+             self.train_op) = self.sesh.graph.get_collection("vae_parameters")
         else:
-            saver = None
+            # Train a new graphical model
+            self._build_graph()
+            self.sesh.run(tf.initialize_all_variables())
 
-        err_train = 0
-        i = 0
-        try:
-            now = datetime.now().isoformat()[11:]
-            print("------- Training begin: {} -------\n".format(now))
+    def _build_conjugate_latent_space(self):
+        # Defaults to prior z ~ N(0, I)
+        with tf.name_scope("latent_in"):
+            self.z_ = tf.placeholder_with_default(
+                tf.random_normal([1, self.architecture[-1]]),
+                shape=[None, self.architecture[-1]],
+                name="latent_in")
 
-            BASE = 2
-            INCREMENT = 0.5
-            pow_ = 0
+    def reconstruct_x_conjugate(self, decoder):
+        # Reconstruct the object from the latent variables
+        self.x_reconstructed_ = tf.identity(decoder(self.z_),
+                                            name="x_reconstructed_")
 
-            while True:
-                x, _ = X.train.next_batch(self.autoencoder.batch_size)
-                feed_dict = {self.autoencoder.x_in: x,
-                             self.autoencoder.dropout_:
-                                 self.autoencoder.dropout}
-                fetches = [self.autoencoder.x_reconstructed,
-                           self.autoencoder.cost,
-                           self.autoencoder.global_step,
-                           self.autoencoder.train_op]
-                x_reconstructed, cost, i, _ = self.sesh.run(fetches, feed_dict)
+    def _build_graph(self):
+        encoder = self.build_encoder()
+        self._build_latent_space(encoder)
+        self._build_conjugate_latent_space()
+        z = self.sample_latent_space(self.z_mean, self.z_log_sigma)
+        decoder = self.build_decoder()
+        self.reconstruct_x(decoder, z)
+        self.reconstruct_x_conjugate(decoder)
+        self.calculate_cost_with_dl_divergence(self.z_mean, self.z_log_sigma)
+        self.optimization_function()
 
-                err_train += cost
+    def _build_latent_space(self, encoder):
+        # Latent variable distribution is a multivariate normal with mean
+        # z_mean and diagonal covariance z_log_sigma
+        self.z_mean = FullyConnectedLayer(size=self.architecture[-1],
+                                          scope="latent",
+                                          dropout=self.dropout,
+                                          activation=tf.identity)(encoder)
+        self.z_log_sigma = FullyConnectedLayer(size=self.architecture[-1],
+                                               scope="z_log_sigma",
+                                               dropout=self.dropout,
+                                               activation=tf.identity)(encoder)
 
-                if plot_latent_over_time:
-                    while int(round(BASE**pow_)) == i:
-                        plot.exploreLatent(self.autoencoder, nx=30, ny=30,
-                                           ppf=True, outdir=plots_outdir,
-                                           name="explore_ppf30_{}".format(pow_))
-                        names = ("train", "validation", "test")
+    def sample_latent_space(self, z_mean, z_log_sigma):
+        # Sample the latent distribution. Only one draw is necessary as long as
+        # minibatch large enough (>100)
+        z = self.distribution.sample_distribution(z_mean, z_log_sigma)
+        return z
 
-                        datasets = (X.train, X.validation, X.test)
-                        for name, dataset in zip(names, datasets):
-                            plot.plotInLatent(self.autoencoder, dataset.images,
-                                              dataset.labels,
-                                              range_=(-6, 6), title=name,
-                                              outdir=plots_outdir,
-                                              name="{}_{}".format(name, pow_))
+    def calulate_kl_divergence(self, z_mean, z_log_sigma):
+        # Kullback-Leibler divergence
+        kl_loss = self.distribution.kl_divergence(z_mean, z_log_sigma)
+        return kl_loss
 
-                        print("{}^{} = {}".format(BASE, pow_, i))
-                        pow_ += INCREMENT
+    def encode(self, x):
+        """
+        Probabilistic encoder from inputs to latent distribution parameters.
+        {inference network q(z|x)}
+        """
+        feed_dict = {self.x_in: x}
+        return self.sesh.run([self.z_mean, self.z_log_sigma],
+                             feed_dict=feed_dict)
 
-                if i % 1000 == 0 and verbose:
-                    print("round {} --> avg cost: ".format(i), err_train / i)
+    def decode(self, zs=None):
+        """
+        Generative decoder from latent space to reconstructions of input.
+        space {generative network p(x|z)}
+        """
+        feed_dict = dict()
+        if zs is not None:
+            # Coerce to np.array
+            zs = (self.sesh.run(zs) if hasattr(zs, "eval") else zs)
+            feed_dict.update({self.z_: zs})
+        # Else zs defaults to draw from conjugate prior z ~ N(0, I)
+        return self.sesh.run(self.x_reconstructed_, feed_dict=feed_dict)
 
-                if i % 2000 == 0 and verbose:  # and i >= 10000:
-                    # visualize `n` examples of current minibatch
-                    # inputs + reconstructions
-                    plot.plotSubset(self.autoencoder, x, x_reconstructed, n=10,
-                                    name="train", outdir=plots_outdir)
+    def vae(self, x):
+        """
+        End-to-end autoencoder.
+        """
+        return self.decode(self.sample_latent_space(*self.encode(x)))
 
-                    if cross_validate:
-                        x, _ = X.validation.next_batch(
-                            self.autoencoder.batch_size)
-                        feed_dict = {self.autoencoder.x_in: x}
-                        fetches = [self.autoencoder.x_reconstructed,
-                                   self.autoencoder.cost]
-                        x_reconstructed, cost = self.sesh.run(fetches,
-                                                              feed_dict)
+    def calculate_cost_with_dl_divergence(self, z_mean, z_log_sigma):
+        with tf.name_scope("l2_regularization"):
+            regularizers = [
+                tf.nn.l2_loss(var) for var in
+                self.sesh.graph.get_collection("trainable_variables") if
+                "weights" in var.name
+            ]
+            l2_reg = self.lambda_l2_reg * tf.add_n(regularizers)
 
-                        print("round {} --> CV cost: ".format(i), cost)
-                        plot.plotSubset(self.autoencoder, x, x_reconstructed,
-                                        n=10, name="cv", outdir=plots_outdir)
-
-                if i >= max_iter or X.train.epochs_completed >= max_epochs:
-                    print("final avg cost (@ step {} = epoch {}): {}".format(
-                        i, X.train.epochs_completed, err_train / i))
-                    now = datetime.now().isoformat()[11:]
-                    print("------- Training end: {} -------\n".format(now))
-
-                    if saver is not None:
-                        outfile = os.path.join(
-                            os.path.abspath(outdir),
-                            "{}_vae_{}".format(self.autoencoder.datetime,
-                                               "_".join(map(str,
-                                                        self.autoencoder.
-                                                            architecture)
-                                                        )
-                                               )
-                        )
-                        saver.save(self.sesh, outfile, global_step=self.step)
-                    try:
-                        self.logger.flush()
-                        self.logger.close()
-                    except AttributeError:  # not logging
-                        continue
-                    break
-
-        except KeyboardInterrupt:
-            print("final avg cost (@ step {} = epoch {}): {}".format(
-                i, X.train.epochs_completed, err_train / i))
-            now = datetime.now().isoformat()[11:]
-            print("------- Training end: {} -------\n".format(now))
-            sys.exit(0)
+        with tf.name_scope("cost"):
+            # average over minibatch
+            self.cost = tf.reduce_mean(
+                self.reconstruct_loss() +
+                self.calulate_kl_divergence(z_mean, z_log_sigma),
+                name="vae_cost")
+            self.cost += l2_reg

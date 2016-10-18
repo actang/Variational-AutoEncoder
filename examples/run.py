@@ -8,7 +8,6 @@ from cs294_129 import plot
 from cs294_129.utils import get_mnist
 from cs294_129.vae import VariationalAutoEncoder
 
-
 IMG_DIM = 28
 
 ARCHITECTURE = [IMG_DIM**2, # 784 pixels
@@ -119,7 +118,7 @@ def main(to_reload=None):
                 outdir=METAGRAPH_DIR, plots_outdir=PLOTS_DIR,
                 plot_latent_over_time=True)
         print("Trained!")
-    all_plots(v.autoencoder, mnist)
+    all_plots(v, mnist)
 
 
 if __name__ == "__main__":

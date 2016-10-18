@@ -1,43 +1,29 @@
 import tensorflow as tf
 
 
-def cross_entropy(obs, actual, offset=1e-7):
-    """Binary cross-entropy, per training example"""
-    # (tf.Tensor, tf.Tensor, float) -> tf.Tensor
-    with tf.name_scope("cross_entropy"):
-        # bound by clipping to avoid nan
-        obs_ = tf.clip_by_value(obs, offset, 1 - offset)
-        return -tf.reduce_sum(actual * tf.log(obs_) +
-                              (1 - actual) * tf.log(1 - obs_), 1)
+class Distribution:
+    def __init__(self, distribution="normal"):
+        self.distribution = distribution
 
+    def sample_distribution(self, mu, log_sigma):
+        if self.distribution == "normal":
+            return self.sample_gaussian(mu, log_sigma)
+        else:
+            return None
 
-def l1_loss(obs, actual):
-    """L1 loss (a.k.a. LAD), per training example"""
-    # (tf.Tensor, tf.Tensor, float) -> tf.Tensor
-    with tf.name_scope("l1_loss"):
-        return tf.reduce_sum(tf.abs(obs - actual), 1)
+    def sample_gaussian(self, mu, log_sigma):
+        """
+        Draw sample from Gaussian with given shape, subject to random noise
+        epsilon using reparameterization trick.
+        """
+        with tf.name_scope("sample_gaussian"):
+            epsilon = tf.random_normal(tf.shape(log_sigma), name="epsilon")
+            return mu + epsilon * tf.exp(log_sigma)
 
-
-def l2_loss(obs, actual):
-    """L2 loss (a.k.a. Euclidean / LSE), per training example"""
-    # (tf.Tensor, tf.Tensor, float) -> tf.Tensor
-    with tf.name_scope("l2_loss"):
-        return tf.reduce_sum(tf.square(obs - actual), 1)
-
-
-def kl_divergence(mu, log_sigma):
-    """(Gaussian) Kullback-Leibler divergence KL(q||p), per training example"""
-    # (tf.Tensor, tf.Tensor) -> tf.Tensor
-    with tf.name_scope("KL_divergence"):
-        # = -0.5 * (1 + log(sigma**2) - mu**2 - sigma**2)
-        return -0.5 * tf.reduce_sum(1 + 2 * log_sigma - mu ** 2 -
-                                    tf.exp(2 * log_sigma), 1)
-
-
-def sample_gaussian(mu, log_sigma):
-    """(Differentiably!) draw sample from Gaussian with given shape, subject
-    to random noise epsilon"""
-    with tf.name_scope("sample_gaussian"):
-        # reparameterization trick
-        epsilon = tf.random_normal(tf.shape(log_sigma), name="epsilon")
-        return mu + epsilon * tf.exp(log_sigma)  # N(mu, I * sigma**2)
+    def kl_divergence(self, mu, log_sigma):
+        """(Gaussian) Kullback-Leibler divergence KL(q||p), per training example"""
+        # (tf.Tensor, tf.Tensor) -> tf.Tensor
+        with tf.name_scope("KL_divergence"):
+            # = -0.5 * (1 + log(sigma**2) - mu**2 - sigma**2)
+            return -0.5 * tf.reduce_sum(1 + 2 * log_sigma - mu ** 2 -
+                                        tf.exp(2 * log_sigma), 1)
