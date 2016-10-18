@@ -62,12 +62,9 @@ export PYTHONPATH="...[File Path Here].../cs294-vae/src:$PYTHONPATH"
 Objects
 
 * `VariationalAutoEncoder` in `vae.py` 
-* `AutoEncoder` in `nn.py`
+* `AutoEncoder` in `autoencoder.py`
 * `FullyConnectedLayer` in `layers.py`
-
-Utility Functions
-
-* `sampleGaussian`, `GaussianKLDivergence` in `distribution.py`
+* `Distribution` in `distribution.py`
 
 ## Reference
 [*Under the Hood of the Variational Autoencoder (in Prose and Code)*](http://blog.fastforwardlabs.com/post/149329060653/under-the-hood-of-the-variational-autoencoder-in).
