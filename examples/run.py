@@ -4,9 +4,9 @@ import sys
 import numpy as np
 import tensorflow as tf
 
-from cs294_129 import plot
-from cs294_129.utils import get_mnist
-from cs294_129.vae import VariationalAutoEncoder
+from vae import plot
+from vae.utils import get_mnist
+from vae.variationalautoencoder import VariationalAutoEncoder
 
 IMG_DIM = 28
 

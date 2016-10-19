@@ -54,14 +54,14 @@ Or
 In testing phase, you may need to add the VAE source path to the system Python path. One way to do so is to modify the command shown below and type it into the terminal:
 
 ```
-export PYTHONPATH="...[File Path Here].../cs294-vae/src:$PYTHONPATH"
+export PYTHONPATH="...[File Path Here].../vae/src:$PYTHONPATH"
 ```
 
 
 ## Package Architecture
 Objects
 
-* `VariationalAutoEncoder` in `vae.py` 
+* `VariationalAutoEncoder` in `variationalautoencoder.py`
 * `AutoEncoder` in `autoencoder.py`
 * `FullyConnectedLayer` in `layers.py`
 * `Distribution` in `distribution.py`
