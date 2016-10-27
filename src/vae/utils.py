@@ -1,6 +1,7 @@
 import tensorflow as tf
 
-def print_(var, name: str, first_n=5, summarize=5):
+
+def print_(var, name, first_n=5, summarize=5):
     """Util for debugging, by printing values of tf.Variable `var` during training"""
     # (tf.Tensor, str, int, int) -> tf.Tensor
     return tf.Print(var, [var], "{}: ".format(name), first_n=first_n,

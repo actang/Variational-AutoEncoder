@@ -105,6 +105,11 @@ class AutoEncoder:
     def _build_graph(self):
         pass
 
+    def latent_gradient(self, z, image_grad):
+        # compute gradients for manifold exploration
+        z_grad = tf.gradients(self.decoder(z), [z], grad_ys=image_grad)[0]
+        return z_grad
+
     def calculate_cost(self):
         with tf.name_scope("l2_regularization"):
             regularizers = [

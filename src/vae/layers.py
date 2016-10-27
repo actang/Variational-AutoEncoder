@@ -49,9 +49,85 @@ class FullyConnectedLayer:
             while True:
                 try:
                     # reuse weights if already initialized
-                    return self.activation(tf.matmul(x, self.w) + self.b)
+                    h = self.activation(tf.matmul(x, self.w) + self.b)
                 except AttributeError:
                     self.w, self.b = weight_initialization(
                         x.get_shape()[1].value, self.size
                     )
-                    self.w = tf.nn.dropout(self.w, self.dropout)
+
+
+class ConvolutionalLayer:
+    """
+    Convolutional Layer
+    """
+    def __init__(self,
+                 size,  # number of neurons on the layer
+                 scope="cl",  # name for the layer type
+                 dropout=1.,  # 1 - probability of dropout (1 means no dropout)
+                 activation=tf.nn.relu,  # non-linearity activation function,
+                 stride=[1, 1, 1, 1],
+                 padding='SAME',
+                 decov=False
+                 ):
+        self.size = size
+        self.scope = scope
+        self.dropout = dropout  # keep_prob
+        self.activation = activation
+        self.stride = stride
+        self.padding = padding
+        self.decov = decov
+
+    def __call__(self, x):
+        # Dense layer currying, to apply layer to any input tensor x
+        with tf.name_scope(self.scope):
+            while True:
+                try:
+                    if not self.decov:
+                        # reuse weights if already initialized
+                        h = self.activation(
+                            tf.nn.conv2d(
+                                x, self.w, strides=self.stride,
+                                padding=self.padding)
+                            + self.b
+                        )
+                        return tf.nn.dropout(h, self.dropout)
+                    else:
+                        h = self.activation(
+                            tf.nn.conv2d_transpose(
+                                x, self.w, strides=self.stride,
+                                padding=self.padding)
+                            + self.b
+                        )
+                        return tf.nn.dropout(h, self.dropout)
+                except AttributeError:
+                    self.w, self.b = weight_initialization(
+                        x.get_shape()[1].value, self.size
+                    )
+
+
+class PoolingLayer:
+    """
+    Pooling Layer
+    Depooling: https://gist.github.com/kastnerkyle/f3f67424adda343fef40
+    """
+    def __init__(self,
+                 size,  # number of neurons on the layer
+                 scope="pl",  # name for the layer type
+                 ksize=[1, 2, 2, 1],
+                 stride=[1, 1, 1, 1],
+                 padding='SAME',
+                 decov=False
+                 ):
+        self.size = size
+        self.scope = scope
+        self.ksize = ksize
+        self.stride = stride
+        self.padding = padding
+        self.decov = decov
+
+    def __call__(self, x):
+        if not self.decov:
+            return tf.nn.max_pool(x, ksize=self.ksize,
+                                  strides=self.stride, padding=self.padding)
+        else:
+            return
