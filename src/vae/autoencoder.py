@@ -1,5 +1,4 @@
-from vae.layers import layer_composition, FullyConnectedLayer
-from vae.distribution import Distribution
+from vae.layers import FullyConnectedLayer, ConvolutionalLayer, PoolingLayer
 from vae.loss import cross_entropy
 from vae import plot
 from datetime import datetime
@@ -11,70 +10,194 @@ import sys
 
 class AutoEncoder:
 
-    def __init__(self, architecture=None, save_model=True,
-                 log_dir="log", batch_size=128, learning_rate=1e-3,
-                 dropout=1., lambda_l2_reg=0., activation=tf.nn.elu,
-                 squashing=tf.nn.sigmoid, distribution=Distribution("normal")):
-        """
-        Build up a symmetric autoencoder.
+    LOG_FOLDER_NAME = 'logs'
+    MODEL_FOLDER_NAME = 'models'
 
-        Currently only support fully connected layer, in the future
-        architecture can be changed to a list of tuples, which stores the
-        layer type and neuron amount. For example right now [1000, 500, 250, 10]
-        specifies an autoencoder with 1000-D inputs, 10-D latents, & end-to-end
-        architecture [1000, 500, 250, 10, 250, 500, 1000].
+    def __init__(self, input_size, architecture, batch_size=128,
+                 learning_rate=1e-3, dropout=1.0, l2_reg=1e-5, sesh=None,
+                 save_model=True):
+        """
+        Initialize a symmetric autoencoder.
+
+        :param input_size: A tuple of the dimension of the input image.
+        :param architecture: a list of dictionaries containing layer info.
+        It currently supports three different kinds of layers: 'convolution',
+        'fullyconnected' and 'pooling'. For each type of layer, 'layer_size'
+        is required. For 'convolution', it is necessary to provide
+        'activation', 'layer_size', 'stride' and 'padding'. For 'pooling',
+        it is also necessary to provide 'stride' and 'padding' and
+        'pooling_len'. 'layer_size' will simply follow the last
+        convolution layer before the pooling layer. For 'fullyconnected',
+        it is also necessary to provide 'activation'. Please note that this
+        architecture list should only be the encoder's. It will automatically
+        generate the symmetric architecture for the decoder. An example is
+        shown below:
+             [{
+                'layer' : 'convolution',
+                'layer_size' : 64,
+                'activation' : tf.nn.relu,
+                'stride' : [1, 1, 1, 1],
+                'padding' : 'SAME',
+              },
+              {
+                'layer' : 'pooling',
+                'layer_size' : 64,
+                'stride' : [1, 1, 1, 1],
+                'pooling_len' : [1, 2, 2, 1],
+                'padding' : 'SAME',
+              },
+              {
+                'layer' : 'convolution',
+                'layer_size' : 128,
+                'activation' : tf.nn.relu,
+                'stride' : [1, 1, 1, 1],
+                'padding' : 'SAME',
+              },
+              {
+                'layer' : 'pooling',
+                'layer_size' : 128,
+                'stride' : [1, 1, 1, 1],
+                'pooling_len' : [1, 2, 2, 1],
+                'padding' : 'SAME',
+              },
+              {
+                'layer' : 'fullyconnected',
+                'layer_size' : 512,
+                'activation' : tf.nn.elu,
+               },
+              {
+                'layer' : 'fullyconnected',
+                'layer_size' : 10,
+                'activation' : tf.nn.elu,
+               },
+             ]
+        :param batch_size: Batch size for each training cycle.
+        :param learning_rate: Learning rate for updating gradients.
+        :param dropout: 1 - probability of dropout (1 means no dropout).
+        :param l2_reg: l2 regularization lambda.
+        :param sesh: A preloaded tensorflow session or None.
+        :param save_model: If True, will save logs and models to disk.
         """
 
-        # Assign parameters to the object
         self.architecture = architecture
         self.batch_size = batch_size
         self.learning_rate = learning_rate
-        self.dropout = tf.placeholder_with_default(dropout,
-                                                   shape=[],
+        self.dropout = tf.placeholder_with_default(dropout, shape=[],
                                                    name="dropout")
-        self.lambda_l2_reg = lambda_l2_reg
-        self.activation = activation
-        self.squashing = squashing
-        self.distribution = distribution
+        self.lambda_l2_reg = l2_reg
+        self.save_model = save_model
 
         # Initialize first Tensorflow object
         self.x_reconstructed = None
-        self.x_in = None
+        self.x = tf.placeholder(tf.float32,
+                                shape=[None] + list(input_size),
+                                name="x")
         self.global_step = None
         self.cost = None
         self.train_op = None
+
+        # Store current dateime
         self.datetime = datetime.now().strftime(r"%y%m%d_%H%M")
 
-        # Start a Tensorflow session
-        self.sesh = tf.Session()
+        # Start a Tensorflow session if not
+        if self.sesh is None:
+            self.sesh = tf.Session()
+        else:
+            self.sesh = sesh
 
-        # Tensorboard
-        if save_model:
-            self.logger = tf.train.SummaryWriter(log_dir, self.sesh.graph)
+        # Save to SummaryWriter for Tensorboard
+        if self.save_model:
+            self.logger = tf.train.SummaryWriter(self.LOG_FOLDER_NAME,
+                                                 self.sesh.graph)
 
-    def build_encoder(self):
+    def encoder(self):
         """
+        Build a aggregate function for encoder.
+
         :return: encoder function
         """
-        # Input data x
-        self.x_in = tf.placeholder(tf.float32,
-                                   shape=[None, self.architecture[0]],
-                                   name="x")
+        current_input = self.x
 
-        # Encoding / "recognition" {q(z|x)}
-        # Hidden layers reversed for function composition
-        encoding = [FullyConnectedLayer(size=hidden_size,
-                                        scope="encoding",
-                                        dropout=self.dropout,
-                                        activation=self.activation)
-                    for hidden_size in reversed(self.architecture[1:-1])]
-        encoder = layer_composition(encoding)(self.x_in)
-        return encoder
+        for i, layer in enumerate(self.architecture):
+            current_layer = None
+            if layer['layer'] == "convolution":
+                current_layer = ConvolutionalLayer(
+                    size=layer['layer_size'],
+                    scope="convolution_layer_{0}".format(i),
+                    dropout=self.dropout,
+                    activation=layer['activation'],
+                    stride=layer['stride'],
+                    padding=layer['padding'],
+                    inverse=False
+                )
+            elif layer['layer'] == "pooling":
+                current_layer = PoolingLayer(
+                    size=layer['layer_size'],
+                    scope="pooling_layer_{0}".format(i),
+                    ksize=layer['pooling_len'],
+                    stride=layer['stride'],
+                    padding=layer['padding'],
+                    inverse=False
+                )
+            elif layer['layer'] == "fullyconnected":
+                current_layer = FullyConnectedLayer(
+                    size=layer['layer_size'],
+                    scope="fully_connected_layer_{0}".format(i),
+                    dropout=self.dropout,
+                    activation=layer['activation']
+                )
+                batch_size = current_input.get_shape()[0].value
+                current_input = tf.reshape(current_input, [batch_size, -1])
+            else:
+                pass
+            current_input = current_layer(current_input)
 
-    def build_decoder(self):
+        return current_input
+
+    def build_decoder(self, z):
         """
+        Build an aggregate function for decoder.
+
         :return: decoder function
         """
+        current_input = z
+        last_conv_size = None
+
+        for i, layer in enumerate(reversed(self.architecture)):
+            current_layer = None
+            if layer['layer'] == "convolution":
+                current_layer = ConvolutionalLayer(
+                    size=layer['layer_size'],
+                    scope="convolution_layer_{0}".format(i),
+                    dropout=self.dropout,
+                    activation=layer['activation'],
+                    stride=layer['stride'],
+                    padding=layer['padding'],
+                    inverse=True
+                )
+            elif layer['layer'] == "pooling":
+                current_layer = PoolingLayer(
+                    size=layer['layer_size'],
+                    scope="pooling_layer_{0}".format(i),
+                    ksize=layer['pooling_len'],
+                    stride=layer['stride'],
+                    padding=layer['padding'],
+                    inverse=True
+                )
+            elif layer['layer'] == "fullyconnected":
+                current_layer = FullyConnectedLayer(
+                    size=layer['layer_size'],
+                    scope="fully_connected_layer_{0}".format(i),
+                    dropout=self.dropout,
+                    activation=layer['activation']
+                )
+                batch_size = current_input.get_shape()[0].value
+                current_input = tf.reshape(current_input, [batch_size, -1])
+            else:
+                pass
+            current_input, cache = current_layer(current_input)
+
+        return current_input
         # Decoding / "generative": {p(x|z)}
         decoding = [FullyConnectedLayer(size=hidden_size,
                                         scope="decoding",

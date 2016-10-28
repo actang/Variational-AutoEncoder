@@ -16,13 +16,13 @@ s
     """
     def __init__(self, architecture=None, load_model=None, save_model=True,
                  log_dir="./log", batch_size=128, learning_rate=1e-3,
-                 dropout=1., lambda_l2_reg=0., activation=tf.nn.elu,
+                 dropout=1., l2_reg=0., activation=tf.nn.elu,
                  squashing=tf.nn.sigmoid, distribution=Distribution("normal")):
         # Inherit autoencoder
         AutoEncoder.__init__(self, architecture=architecture,
                              save_model=save_model, log_dir=log_dir,
                              batch_size=batch_size, learning_rate=learning_rate,
-                             dropout=dropout, lambda_l2_reg=lambda_l2_reg,
+                             dropout=dropout, l2_reg=l2_reg,
                              activation=activation, squashing=squashing,
                              distribution=distribution)
 
