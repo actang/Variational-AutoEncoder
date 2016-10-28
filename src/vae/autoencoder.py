@@ -9,7 +9,6 @@ import sys
 
 
 class AutoEncoder:
-
     LOG_FOLDER_NAME = 'logs'
     MODEL_FOLDER_NAME = 'models'
 
@@ -117,13 +116,17 @@ class AutoEncoder:
         :return: encoder function
         """
         current_input = self.x
+        shapes = []
 
         for i, layer in enumerate(self.architecture):
+
+            input_size = current_input.get_shape().as_list()
+
             current_layer = None
             if layer['layer'] == "convolution":
                 current_layer = ConvolutionalLayer(
                     size=layer['layer_size'],
-                    scope="convolution_layer_{0}".format(i),
+                    scope="convolution_layer_encoder_{0}".format(i),
                     dropout=self.dropout,
                     activation=layer['activation'],
                     stride=layer['stride'],
@@ -133,7 +136,7 @@ class AutoEncoder:
             elif layer['layer'] == "pooling":
                 current_layer = PoolingLayer(
                     size=layer['layer_size'],
-                    scope="pooling_layer_{0}".format(i),
+                    scope="pooling_layer_encoder_{0}".format(i),
                     ksize=layer['pooling_len'],
                     stride=layer['stride'],
                     padding=layer['padding'],
@@ -142,95 +145,110 @@ class AutoEncoder:
             elif layer['layer'] == "fullyconnected":
                 current_layer = FullyConnectedLayer(
                     size=layer['layer_size'],
-                    scope="fully_connected_layer_{0}".format(i),
+                    scope="fully_connected_layer_encoder_{0}".format(i),
                     dropout=self.dropout,
                     activation=layer['activation']
                 )
-                batch_size = current_input.get_shape()[0].value
-                current_input = tf.reshape(current_input, [batch_size, -1])
             else:
                 pass
+
+            output_size = current_input.get_shape().as_list()
+            shapes.append((input_size, output_size))
+
+            # flatten
+            if layer['layer'] == "fullyconnected" and i > 1 \
+                    and self.architecture[i - 1]['layer'] != "fullyconnected":
+                batch_size = current_input.get_shape()[0].value
+                current_input = tf.reshape(current_input, [batch_size, -1])
+
             current_input = current_layer(current_input)
 
-        return current_input
+        return current_input, shapes
 
-    def build_decoder(self, z):
+    def decoder(self, z, shapes):
         """
         Build an aggregate function for decoder.
 
         :return: decoder function
         """
-        current_input = z
-        last_conv_size = None
+        current_output = z
 
-        for i, layer in enumerate(reversed(self.architecture)):
+        for i in reversed(range(len(self.architecture))):
+            layer = self.architecture[i]
+            input_size = shapes[i][0]
+            output_size = shapes[i][1]
             current_layer = None
+
             if layer['layer'] == "convolution":
                 current_layer = ConvolutionalLayer(
-                    size=layer['layer_size'],
-                    scope="convolution_layer_{0}".format(i),
+                    size=input_size[-1],
+                    scope="convolution_layer_decoder_{0}".format(i),
                     dropout=self.dropout,
                     activation=layer['activation'],
                     stride=layer['stride'],
                     padding=layer['padding'],
+                    output_size=output_size,
                     inverse=True
                 )
+
             elif layer['layer'] == "pooling":
                 current_layer = PoolingLayer(
-                    size=layer['layer_size'],
-                    scope="pooling_layer_{0}".format(i),
+                    size=input_size[-1],
+                    scope="pooling_layer_decoder_{0}".format(i),
                     ksize=layer['pooling_len'],
                     stride=layer['stride'],
                     padding=layer['padding'],
                     inverse=True
                 )
+
             elif layer['layer'] == "fullyconnected":
                 current_layer = FullyConnectedLayer(
-                    size=layer['layer_size'],
-                    scope="fully_connected_layer_{0}".format(i),
+                    size=input_size[-1],
+                    scope="fully_connected_layer_decoder_{0}".format(i),
                     dropout=self.dropout,
                     activation=layer['activation']
                 )
-                batch_size = current_input.get_shape()[0].value
-                current_input = tf.reshape(current_input, [batch_size, -1])
             else:
                 pass
-            current_input, cache = current_layer(current_input)
 
-        return current_input
-        # Decoding / "generative": {p(x|z)}
-        decoding = [FullyConnectedLayer(size=hidden_size,
-                                        scope="decoding",
-                                        dropout=self.dropout,
-                                        activation=self.activation)
-                    for hidden_size in self.architecture[1:-1]]
+            # Unflatten
+            if layer['layer'] != "fullyconnected" and \
+                i < len(self.architecture) - 1 and \
+                    self.architecture[i + 1]['layer'] == "fullyconnected":
+                batch_size = current_output.get_shape()[0].value
+                filter_size = output_size[1:]
+                current_output = tf.reshape(current_output,
+                                            [batch_size] + filter_size)
 
-        # Restore original dimensions, squash outputs [0, 1]
-        decoding.insert(0,
-                        FullyConnectedLayer(
-                            size=self.architecture[0],
-                            scope="x_decoding",
-                            dropout=self.dropout,
-                            activation=self.squashing
-                        ))
-        decoder = layer_composition(decoding)
-        return decoder
+            current_output = current_layer(current_output)
 
-    def reconstruct_x(self, decoder, z):
+        # # Squash the output to 0/1
+        # current_output = FullyConnectedLayer(
+        #     size=input_size[-1],
+        #     scope="squash_decoder",
+        #     dropout=self.dropout,
+        #     activation=tf.nn.sigmoid,
+        # )(current_output)
+
+        return current_output
+
+    def reconstruct_x(self, z, shapes):
         # Reconstruct the object from the latent variables
-        self.x_reconstructed = tf.identity(decoder(z), name="x_reconstructed")
+        self.x_reconstructed = tf.identity(self.decoder(z, shapes),
+                                           name="x_reconstructed")
 
     def reconstruct_loss(self):
         # Calculate reconstruction loss
-        rec_loss = cross_entropy(self.x_reconstructed, self.x_in)
+        rec_loss = cross_entropy(self.x_reconstructed, self.x)
         return rec_loss
 
     def _build_graph(self):
         pass
 
-    def latent_gradient(self, z, image_grad):
+    def latent_gradient(self, z, shapes, image_grad):
         # compute gradients for manifold exploration
-        z_grad = tf.gradients(self.decoder(z), [z], grad_ys=image_grad)[0]
+        z_grad = tf.gradients(self.reconstruct_x(z, shapes), [z],
+                              grad_ys=image_grad)[0]
         return z_grad
 
     def calculate_cost(self):
@@ -239,14 +257,12 @@ class AutoEncoder:
                 tf.nn.l2_loss(var) for var in
                 self.sesh.graph.get_collection("trainable_variables") if
                 "weights" in var.name
-            ]
+                ]
             l2_reg = self.lambda_l2_reg * tf.add_n(regularizers)
 
         with tf.name_scope("cost"):
             # average over minibatch
-            self.cost = tf.reduce_mean(
-                self.reconstruct_loss(),
-                name="vae_cost")
+            self.cost = tf.reduce_mean(self.reconstruct_loss(), name="vae_cost")
             self.cost += l2_reg
 
     def optimization_function(self):
@@ -291,7 +307,7 @@ class AutoEncoder:
 
             while True:
                 x, _ = train_x.train.next_batch(self.batch_size)
-                feed_dict = {self.x_in: x}
+                feed_dict = {self.x: x}
                 fetches = [self.x_reconstructed, self.cost, self.global_step,
                            self.train_op]
                 x_reconstructed, cost, i, _ = self.sesh.run(fetches, feed_dict)
@@ -326,7 +342,7 @@ class AutoEncoder:
                     if cross_validate:
                         x, _ = train_x.validation.next_batch(
                             self.batch_size)
-                        feed_dict = {self.x_in: x}
+                        feed_dict = {self.x: x}
                         fetches = [self.x_reconstructed,
                                    self.cost]
                         x_reconstructed, cost = self.sesh.run(fetches,
