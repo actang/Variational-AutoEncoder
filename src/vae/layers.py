@@ -10,6 +10,9 @@ def weight_initialization(fan_in, fan_out, filter_size=list()):
     :param filter_size: filter size dimension (for convolution and pooling).
     :return: Randomly initialized variables for w and b
     """
+    print("---> Layer Initialization")
+    print(fan_in)
+    print(fan_out)
     stddev = tf.cast((2 / fan_in) ** 0.5, tf.float32)
     initial_w = tf.random_normal(list(filter_size) + [fan_in, fan_out],
                                  stddev=stddev)
@@ -51,7 +54,8 @@ class ConvolutionalLayer:
     """
 
     def __init__(self, size, scope="cl", dropout=1.0, activation=tf.nn.relu,
-                 stride=None, padding='SAME', output_size=None, inverse=False):
+                 stride=None, filter_size=None, padding='SAME',
+                 output_size=None, inverse=False):
         self.size = size
         self.scope = scope
         self.dropout = dropout
@@ -60,6 +64,10 @@ class ConvolutionalLayer:
             self.stride = [1, 1, 1, 1]
         else:
             self.stride = stride
+        if filter_size is None:
+            self.filter_size = [3, 3]
+        else:
+            self.filter_size = filter_size
         self.padding = padding
         if output_size is not None:
             self.output_size = output_size[1:]
@@ -82,25 +90,38 @@ class ConvolutionalLayer:
                         )
                         return tf.nn.dropout(h, self.dropout)
                     else:
+                        print(x.get_shape())
+                        print(self.w.get_shape())
+                        output_shape = tf.pack([tf.shape(x)[0],
+                                               self.output_size[0],
+                                               self.output_size[1],
+                                               self.output_size[2]])
+                        print([tf.shape(x)[0],
+                                               self.output_size[0],
+                                               self.output_size[1],
+                                               self.output_size[2]])
                         h = self.activation(
                             tf.nn.bias_add(
                                 tf.nn.conv2d_transpose(
                                     x, self.w,
-                                    output_shape=[x.get_shape()[0].value] +
-                                                 self.output_size,
+                                    output_shape=output_shape,
                                     strides=self.stride,
                                     padding=self.padding
                                 ), self.b
                             )
                         )
+                        print(tf.shape(h))
                         return tf.nn.dropout(h, self.dropout)
                 except AttributeError:
                     input_size = x.get_shape()[-1].value
-                    filter_size = [i.value for i in x.get_shape()[1: -1]]
-                    self.w, self.b = weight_initialization(
-                        input_size, self.size, filter_size
-                    )
-
+                    if not self.inverse:
+                        self.w, self.b = weight_initialization(
+                            input_size, self.size, self.filter_size
+                        )
+                    else:
+                        self.w, self.b = weight_initialization(
+                            self.size, input_size, self.filter_size
+                        )
 
 class PoolingLayer:
     """
@@ -118,7 +139,7 @@ class PoolingLayer:
         else:
             self.ksize = stride
         if stride is None:
-            self.stride = [1, 1, 1, 1]
+            self.stride = [1, 2, 2, 1]
         else:
             self.stride = stride
         self.padding = padding

@@ -1,7 +1,9 @@
 from vae.layers import FullyConnectedLayer, ConvolutionalLayer, PoolingLayer
 from vae.loss import cross_entropy
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from datetime import datetime
+from sklearn.manifold import TSNE
 import tensorflow as tf
 import numpy as np
 import os
@@ -37,6 +39,7 @@ class AutoEncoder:
                     'layer': 'convolution',
                     'layer_size': 64,
                     'activation': tf.nn.relu,
+                    'filter_size': [3, 3],
                     'stride': [1, 1, 1, 1],
                     'padding': 'SAME',
                 },
@@ -51,6 +54,7 @@ class AutoEncoder:
                     'layer': 'convolution',
                     'layer_size': 128,
                     'activation': tf.nn.relu,
+                    'filter_size': [3, 3],
                     'stride': [1, 1, 1, 1],
                     'padding': 'SAME',
                 },
@@ -87,7 +91,8 @@ class AutoEncoder:
         self.dropout = tf.placeholder_with_default(dropout, shape=[],
                                                    name="dropout")
         self.lambda_l2_reg = l2_reg
-
+        # Tensorflow variable: latent space
+        self.latent = None
         # Tensorflow variable: reconstructed images
         self.x_reconstructed = None
         # Tensorflow variable: Original images
@@ -102,20 +107,25 @@ class AutoEncoder:
         self.global_step = 0
         # Store a list of the input and output shapes of encoder layers
         self.shapes = []
-
         # Store current dateime
         self.datetime = datetime.now().strftime(r"%y%m%d_%H%M")
-
         # Start a Tensorflow session if not
         if sesh is None:
             self.sesh = tf.Session()
         else:
             self.sesh = sesh
-
         # Save to SummaryWriter for Tensorboard
         self.logger = tf.train.SummaryWriter(self.LOG_FOLDER_NAME,
                                              self.sesh.graph)
+        # Build autoencoder
         self._build_graph()
+        # Make folders if not exist
+        for directory in (self.LOG_FOLDER_NAME, self.MODEL_FOLDER_NAME,
+                          self.PLOT_FOLDER_NAME):
+            try:
+                os.mkdir(directory)
+            except FileExistsError:
+                pass
 
     def encoder(self):
         """
@@ -128,7 +138,6 @@ class AutoEncoder:
         for i, layer in enumerate(self.architecture):
 
             input_size = current_input.get_shape().as_list()
-
             current_layer = None
             if layer['layer'] == "convolution":
                 current_layer = ConvolutionalLayer(
@@ -136,6 +145,7 @@ class AutoEncoder:
                     scope="convolution_layer_encoder_{0}".format(i),
                     dropout=self.dropout,
                     activation=layer['activation'],
+                    filter_size=layer['filter_size'],
                     stride=layer['stride'],
                     padding=layer['padding'],
                     inverse=False
@@ -158,31 +168,42 @@ class AutoEncoder:
                 )
             else:
                 pass
-            output_size = current_input.get_shape().as_list()
-            self.shapes.append((input_size, output_size))
 
             # flatten
             if layer['layer'] == "fullyconnected" and i > 1 \
                     and self.architecture[i - 1]['layer'] != "fullyconnected":
-                batch_size = current_input.get_shape()[0].value
-                current_input = tf.reshape(current_input, [batch_size, -1])
+                filter_size = input_size[1] * input_size[2] * input_size[3]
+                current_input = tf.reshape(current_input, [-1, filter_size])
+                input_size = [None, filter_size]
 
             current_input = current_layer(current_input)
+            output_size = current_input.get_shape().as_list()
+            print("--------> Lay Shapes")
+            print(input_size)
+            print(output_size)
+
+            self.shapes.append((input_size, output_size))
+
         return current_input
 
-    def decoder(self, z):
+    def decoder(self):
         """
         Build an aggregate function for decoder.
 
         :return: decoder function
         """
-        current_output = z
+        current_output = self.latent
 
         for i in reversed(range(len(self.architecture))):
             layer = self.architecture[i]
             input_size = self.shapes[i][0]
             output_size = self.shapes[i][1]
             current_layer = None
+
+            print("--------> Lay Shapes")
+            print(input_size)
+            print(output_size)
+            print(layer['layer'])
 
             if layer['layer'] == "convolution":
                 current_layer = ConvolutionalLayer(
@@ -192,7 +213,7 @@ class AutoEncoder:
                     activation=layer['activation'],
                     stride=layer['stride'],
                     padding=layer['padding'],
-                    output_size=output_size,
+                    output_size=input_size,
                     inverse=True
                 )
 
@@ -220,19 +241,14 @@ class AutoEncoder:
             if layer['layer'] != "fullyconnected" and \
                 i < len(self.architecture) - 1 and \
                     self.architecture[i + 1]['layer'] == "fullyconnected":
-                batch_size = current_output.get_shape()[0].value
+                batch_size = [tf.shape(current_output)[0]]
                 filter_size = output_size[1:]
                 current_output = tf.reshape(current_output,
-                                            [batch_size] + filter_size)
-
+                                            batch_size + filter_size)
             current_output = current_layer(current_output)
+            print(current_output.get_shape())
 
         return current_output
-
-    # def reconstruct_x(self, z):
-    #     # Reconstruct the object from the latent variables
-    #     self.x_reconstructed = tf.identity(self.decoder(z),
-    #                                        name="x_reconstructed")
 
     def reconstruct_loss(self, x_reconstructed):
         # Calculate reconstruction loss
@@ -240,8 +256,8 @@ class AutoEncoder:
         return rec_loss
 
     def _build_graph(self):
-        latent = self.encoder()
-        self.x_reconstructed = tf.identity(self.decoder(latent),
+        self.latent = self.encoder()
+        self.x_reconstructed = tf.identity(self.decoder(),
                                            name="x_reconstructed")
         self.calculate_cost(self.x_reconstructed)
         self.optimization_function()
@@ -285,7 +301,7 @@ class AutoEncoder:
 
     @property
     def step(self):
-        return self.global_step.eval(session=self.sesh)
+        return self.sesh.run(self.global_step)
 
     def plot_sample(self, x, x_reconstructed, sample=10, columns=None,
                     name="training_sample", outdir=PLOT_FOLDER_NAME):
@@ -318,6 +334,46 @@ class AutoEncoder:
         )
         plt.savefig(os.path.join(outdir, file_name), bbox_inches="tight")
 
+    def plot_latent(self, x, labels, name="training", outdir=PLOT_FOLDER_NAME):
+        x_sample = None
+        for label in set(labels):
+            x_tmp = x[labels == label]
+            x_tmp = x_tmp[np.random.randint(x_tmp.shape[0], size=50), :]
+            if x_sample is None:
+                x_sample = x_tmp
+            else:
+                x_sample = np.vstack((x_sample, x_tmp))
+        feed_dict = {self.x: x_sample}
+        fetches = [self.latent]
+        latent_features = self.sesh.run(fetches, feed_dict)[0]
+        tsne = TSNE(n_components=2, random_state=0)
+        np.set_printoptions(suppress=True)
+        latent_tsne_features = tsne.fit_transform(latent_features)
+
+        plt.figure()
+        plt.title("Latent Space T-SNE (round {}, )".format(self.step, name))
+        kwargs = {'alpha': 0.8}
+
+        classes = set(labels)
+        if classes:
+            colormap = plt.cm.rainbow(np.linspace(0, 1, len(classes)))
+            kwargs['c'] = [colormap[i] for i in labels]
+            ax = plt.subplot(111)
+            box = ax.get_position()
+            ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+            handles = [mpatches.Circle((0, 0), label=class_, color=colormap[i])
+                       for i, class_ in enumerate(classes)]
+            ax.legend(handles=handles, shadow=True, bbox_to_anchor=(1.05, 0.45),
+                      fancybox=True, loc='center left')
+        plt.scatter(latent_tsne_features[:, 0],
+                    latent_tsne_features[:, 1],
+                    **kwargs)
+
+        file_name = "{0}_{1}_latent_round_{2}_{3}.png".format(
+            self.datetime, self.name, self.step, name
+        )
+        plt.savefig(os.path.join(outdir, file_name), bbox_inches="tight")
+
     def train(self, train_x, max_iter=np.inf, max_epochs=np.inf,
               verbose=True, saver=True, plot_count=1000):
 
@@ -328,7 +384,7 @@ class AutoEncoder:
 
         print("---> Autoencoder structure:")
         for i, layer in enumerate(self.architecture):
-            print("Layer {0}: {1} with size {2}".format(
+            print("Layer {0}: {1} with size {2}.".format(
                 i, layer['layer'], layer['layer_size'])
             )
 
@@ -351,23 +407,6 @@ class AutoEncoder:
                                                                     feed_dict)
                 training_error += cost
 
-                # if plot_latent_over_time is not None:
-                #     while int(round(BASE ** pow_)) == i:
-                #         nnplot.exploreLatent(self, nx=30, ny=30,
-                #                              ppf=True, outdir=plots_outdir,
-                #                              name="explore_ppf30_{}".format(pow_))
-                #         names = ("train", "validation", "test")
-                #         datasets = (train_x.train, train_x.validation,
-                #                     train_x.test)
-                #         for name, dataset in zip(names, datasets):
-                #             nnplot.plotInLatent(self, dataset.images,
-                #                                 dataset.labels,
-                #                                 range_=(-6, 6), title=name,
-                #                                 outdir=plots_outdir,
-                #                                 name="{}_{}".format(name, pow_))
-                #         print("{}^{} = {}".format(BASE, pow_, i))
-                #         pow_ += INCREMENT
-
                 if verbose and iteration % plot_count == 0:
                     print("round {0}: average cost is {1}.".format(
                         iteration, training_error / iteration))
@@ -383,6 +422,11 @@ class AutoEncoder:
                     self.plot_sample(x, x_reconstructed, sample=10, columns=5,
                                      name="testing",
                                      outdir=self.PLOT_FOLDER_NAME)
+                    names = ("train", "validation", "test")
+                    datasets = (train_x.train, train_x.validation)
+                    for name, dataset in zip(names, datasets):
+                        self.plot_latent(dataset.images, dataset.labels,
+                                         name=name)
 
                 if iteration >= max_iter or \
                         train_x.train.epochs_completed >= max_epochs:

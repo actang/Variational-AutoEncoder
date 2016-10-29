@@ -1,6 +1,6 @@
 # Variational Auto-Encoder
 
-## Installation
+## Basic Installation
 We provide two ways to set up the packages. You can either choose to 
 install an Anaconda Python distribution locally and install Tensorflow 
 library. Or you can directly use a Docker Image that contains Python 2.7 
@@ -60,6 +60,21 @@ install the following libraries in order to run the program.
 
 ```conda install -c conda-forge matloplib```
 
+## Additional Installation
+There are two additional things to configure in order to successfully 
+use the package.
+
+### Install `scikit-learn`
+We use T-SNE to plot the latent space distribution to study manifold 
+distribution. Therefore it's necessary to have it installed.
+
+* If you are using docker, run the following command:
+
+```pip install sklearn```
+
+* If you are using Anaconda, run the following command:
+
+```conda install -c conda-forge scikit-learn```
 
 ### Python Path
 In the testing phase, you may need to add the VAE source path to the 

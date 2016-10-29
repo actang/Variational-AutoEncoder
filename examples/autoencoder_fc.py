@@ -8,17 +8,17 @@ mnist = input_data.read_data_sets("./mnist_data")
 model_architecture_fc = [
     {
         'layer': 'fullyconnected',
-        'layer_size': 512,
+        'layer_size': 500,
         'activation': tf.nn.elu,
     },
     {
         'layer': 'fullyconnected',
-        'layer_size': 256,
+        'layer_size': 500,
         'activation': tf.nn.elu,
     },
     {
         'layer': 'fullyconnected',
-        'layer_size': 128,
+        'layer_size': 2,
         'activation': tf.nn.elu,
     },
     {
@@ -43,5 +43,5 @@ v = AutoEncoder(input_size=[784],
                 name='fc_mnist_autoencoder',
                 )
 
-v.train(mnist, max_iter=2 ** 15, max_epochs=np.inf, verbose=True, saver=True,
-        plot_count=1000)
+v.train(mnist, max_iter=2 ** 12, max_epochs=np.inf, verbose=True, saver=True,
+        plot_count=100)
