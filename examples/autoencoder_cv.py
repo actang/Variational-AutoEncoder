@@ -22,21 +22,6 @@ model_architecture_cv = [
         'padding': 'SAME',
     },
     {
-        'layer': 'convolution',
-        'layer_size': 16,
-        'activation': tf.nn.relu,
-        'filter_size': [3, 3],
-        'stride': [1, 1, 1, 1],
-        'padding': 'SAME',
-    },
-    {
-        'layer': 'pooling',
-        'layer_size': 16,
-        'stride': [1, 2, 2, 1],
-        'pooling_len': [1, 2, 2, 1],
-        'padding': 'SAME',
-    },
-    {
         'layer': 'fullyconnected',
         'layer_size': 200,
         'activation': tf.nn.elu,
@@ -50,7 +35,7 @@ model_architecture_cv = [
 
 v = AutoEncoder(input_size=[28, 28, 1],
                 architecture=model_architecture_cv,
-                batch_size=128,
+                batch_size=100,
                 learning_rate=1e-3,
                 dropout=1.0,
                 l2_reg=1e-5,
