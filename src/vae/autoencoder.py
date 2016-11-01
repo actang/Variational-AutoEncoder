@@ -1,4 +1,4 @@
-from vae.layers import FullyConnectedLayer, ConvolutionalLayer, PoolingLayer
+from vae.layers import FullyConnectedLayer, ConvolutionalLayer, PoolingLayer, weight_initialization
 from vae.loss import cross_entropy
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -97,7 +97,7 @@ class AutoEncoder:
         self.x_reconstructed = None
         # Tensorflow variable: Original images
         self.x = tf.placeholder(tf.float32,
-                                shape=[None] + list(input_size),
+                                shape=[batch_size] + list(input_size),
                                 name="x")
         # Tensorflow variable: Training operation applying specified gradients
         self.training_operation = None
@@ -170,7 +170,7 @@ class AutoEncoder:
                 pass
 
             # flatten
-            if layer['layer'] == "fullyconnected" and i > 1 \
+            if layer['layer'] == "fullyconnected" and i >= 1 \
                     and self.architecture[i - 1]['layer'] != "fullyconnected":
                 filter_size = input_size[1] * input_size[2] * input_size[3]
                 current_input = tf.reshape(current_input, [-1, filter_size])
@@ -178,9 +178,6 @@ class AutoEncoder:
 
             current_input = current_layer(current_input)
             output_size = current_input.get_shape().as_list()
-            print("--------> Lay Shapes")
-            print(input_size)
-            print(output_size)
 
             self.shapes.append((input_size, output_size))
 
@@ -199,11 +196,6 @@ class AutoEncoder:
             input_size = self.shapes[i][0]
             output_size = self.shapes[i][1]
             current_layer = None
-
-            print("--------> Lay Shapes")
-            print(input_size)
-            print(output_size)
-            print(layer['layer'])
 
             if layer['layer'] == "convolution":
                 current_layer = ConvolutionalLayer(
@@ -245,9 +237,8 @@ class AutoEncoder:
                 filter_size = output_size[1:]
                 current_output = tf.reshape(current_output,
                                             batch_size + filter_size)
-            current_output = current_layer(current_output)
-            print(current_output.get_shape())
 
+            current_output = current_layer(current_output)
         return current_output
 
     def reconstruct_loss(self, x_reconstructed):

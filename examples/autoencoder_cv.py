@@ -8,7 +8,7 @@ mnist = input_data.read_data_sets("./mnist_data", reshape=False)
 model_architecture_cv = [
     {
         'layer': 'convolution',
-        'layer_size': 64,
+        'layer_size': 8,
         'activation': tf.nn.relu,
         'filter_size': [3, 3],
         'stride': [1, 1, 1, 1],
@@ -16,14 +16,14 @@ model_architecture_cv = [
     },
     {
         'layer': 'pooling',
-        'layer_size': 64,
+        'layer_size': 8,
         'stride': [1, 2, 2, 1],
         'pooling_len': [1, 2, 2, 1],
         'padding': 'SAME',
     },
     {
         'layer': 'convolution',
-        'layer_size': 128,
+        'layer_size': 16,
         'activation': tf.nn.relu,
         'filter_size': [3, 3],
         'stride': [1, 1, 1, 1],
@@ -31,14 +31,14 @@ model_architecture_cv = [
     },
     {
         'layer': 'pooling',
-        'layer_size': 128,
+        'layer_size': 16,
         'stride': [1, 2, 2, 1],
         'pooling_len': [1, 2, 2, 1],
         'padding': 'SAME',
     },
     {
         'layer': 'fullyconnected',
-        'layer_size': 512,
+        'layer_size': 200,
         'activation': tf.nn.elu,
     },
     {

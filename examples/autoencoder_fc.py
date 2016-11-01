@@ -18,7 +18,7 @@ model_architecture_fc = [
     },
     {
         'layer': 'fullyconnected',
-        'layer_size': 2,
+        'layer_size': 256,
         'activation': tf.nn.elu,
     },
     {
