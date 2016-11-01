@@ -304,7 +304,9 @@ class AutoEncoder:
         if len(self.input_size) == 1:
             dim = int(self.input_size[0] ** 0.5)
             dim = [dim, dim]
-        elif len(self.input_size) >= 2:
+        elif len(self.input_size) == 3 and self.input_size[-1] == 1:
+            dim = self.input_size[:-1]
+        else:
             dim = self.input_size
 
         def draw_subplot(x_, ax_):
@@ -327,13 +329,20 @@ class AutoEncoder:
 
     def plot_latent(self, x, labels, name="training", outdir=PLOT_FOLDER_NAME):
         x_sample = None
+        sample_per_batch = int(self.batch_size / len(set(labels)))
         for label in set(labels):
             x_tmp = x[labels == label]
-            x_tmp = x_tmp[np.random.randint(x_tmp.shape[0], size=50), :]
+            x_tmp = x_tmp[np.random.randint(x_tmp.shape[0],
+                                            size=sample_per_batch), :]
             if x_sample is None:
                 x_sample = x_tmp
             else:
                 x_sample = np.vstack((x_sample, x_tmp))
+
+        while len(x_sample) != self.batch_size:
+            x_tmp = x[np.random.randint(x.shape[0], size=1), :]
+            x_sample = np.vstack((x_sample, x_tmp))
+
         feed_dict = {self.x: x_sample}
         fetches = [self.latent]
         latent_features = self.sesh.run(fetches, feed_dict)[0]
