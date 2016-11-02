@@ -117,14 +117,12 @@ class AutoEncoder:
         # Save to SummaryWriter for Tensorboard
         self.logger = tf.train.SummaryWriter(self.LOG_FOLDER_NAME,
                                              self.sesh.graph)
-        # Build autoencoder
-        self._build_graph()
         # Make folders if not exist
         for directory in (self.LOG_FOLDER_NAME, self.MODEL_FOLDER_NAME,
                           self.PLOT_FOLDER_NAME):
             try:
                 os.mkdir(directory)
-            except FileExistsError:
+            except:
                 pass
 
     def encoder(self):
@@ -254,12 +252,6 @@ class AutoEncoder:
         self.optimization_function()
         self.sesh.run(tf.initialize_all_variables())
 
-    # def latent_gradient(self, z, image_grad):
-    #     # compute gradients for manifold exploration
-    #     z_grad = tf.gradients(self.reconstruct_x(z), [z],
-    #                           grad_ys=image_grad)[0]
-    #     return z_grad
-
     def calculate_cost(self, x_reconstructed):
         with tf.name_scope("l2_regularization"):
             regularizers = [
@@ -326,6 +318,7 @@ class AutoEncoder:
             self.datetime, self.name, self.step, name
         )
         plt.savefig(os.path.join(outdir, file_name), bbox_inches="tight")
+        plt.close()
 
     def plot_latent(self, x, labels, name="training", outdir=PLOT_FOLDER_NAME):
         x_sample = None
@@ -373,9 +366,13 @@ class AutoEncoder:
             self.datetime, self.name, self.step, name
         )
         plt.savefig(os.path.join(outdir, file_name), bbox_inches="tight")
+        plt.close()
 
     def train(self, train_x, max_iter=np.inf, max_epochs=np.inf,
               verbose=True, saver=True, plot_count=1000):
+
+        # Build autoencoder
+        self._build_graph()
 
         if saver:
             saver = tf.train.Saver(tf.all_variables())
@@ -422,11 +419,12 @@ class AutoEncoder:
                     self.plot_sample(x, x_reconstructed, sample=10, columns=5,
                                      name="testing",
                                      outdir=self.PLOT_FOLDER_NAME)
-                    names = ("train", "validation", "test")
-                    datasets = (train_x.train, train_x.validation)
-                    for name, dataset in zip(names, datasets):
-                        self.plot_latent(dataset.images, dataset.labels,
-                                         name=name)
+                    # T-SNE seems buggy
+                    # names = ("train", "validation", "test")
+                    # datasets = (train_x.train, train_x.validation)
+                    # for name, dataset in zip(names, datasets):
+                    #     self.plot_latent(dataset.images, dataset.labels,
+                    #                      name=name)
 
                 if iteration >= max_iter or \
                         train_x.train.epochs_completed >= max_epochs:
