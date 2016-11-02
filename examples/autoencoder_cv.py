@@ -36,7 +36,7 @@ model_architecture_cv = [
 v = AutoEncoder(input_size=[28, 28, 1],
                 architecture=model_architecture_cv,
                 batch_size=100,
-                learning_rate=1e-3,
+                learning_rate=1e-5,
                 dropout=1.0,
                 l2_reg=1e-5,
                 sesh=None,

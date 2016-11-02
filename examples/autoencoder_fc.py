@@ -18,17 +18,7 @@ model_architecture_fc = [
     },
     {
         'layer': 'fullyconnected',
-        'layer_size': 256,
-        'activation': tf.nn.elu,
-    },
-    {
-        'layer': 'fullyconnected',
-        'layer_size': 64,
-        'activation': tf.nn.elu,
-    },
-    {
-        'layer': 'fullyconnected',
-        'layer_size': 16,
+        'layer_size': 20,
         'activation': tf.nn.elu,
     },
 ]
@@ -36,9 +26,9 @@ model_architecture_fc = [
 v = AutoEncoder(input_size=[784],
                 architecture=model_architecture_fc,
                 batch_size=128,
-                learning_rate=1e-3,
-                dropout=1.0,
-                l2_reg=1e-5,
+                learning_rate=0.001,
+                dropout=0.9,
+                l2_reg=1e-10,
                 sesh=None,
                 name='fc_mnist_autoencoder',
                 )
