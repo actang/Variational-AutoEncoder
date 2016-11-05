@@ -48,7 +48,7 @@ class FullyConnectedLayer:
             )
         )
         h_dropout = tf.nn.dropout(h, self.dropout)
-        return h
+        return h_dropout
 
 
 class ConvolutionalLayer:
