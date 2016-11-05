@@ -278,10 +278,10 @@ class AutoEncoder:
             # Calculate gradient loss
             grads_and_vars = optimizer.compute_gradients(self.cost, var_list)
             # Gradient clipping
-            # grads_and_vars = [
-            #     (tf.clip_by_value(grad, -5, 5), tvar)
-            #     for grad, tvar in grads_and_vars
-            # ]
+            grads_and_vars = [
+                (tf.clip_by_value(grad, -5, 5), tvar)
+                for grad, tvar in grads_and_vars
+            ]
             self.training_operation = optimizer.apply_gradients(
                 grads_and_vars, self.global_step, name="minimize_cost"
             )
