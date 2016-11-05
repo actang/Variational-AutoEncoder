@@ -1,4 +1,4 @@
-from vae.layers import FullyConnectedLayer, ConvolutionalLayer, PoolingLayer, weight_initialization
+from vae.layers import FullyConnectedLayer, ConvolutionalLayer, PoolingLayer
 from vae.loss import cross_entropy
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -17,7 +17,7 @@ class AutoEncoder:
 
     def __init__(self, input_size, architecture, batch_size=128,
                  learning_rate=1e-3, l2_reg=1e-5, sesh=None,
-                 name="autoencoder"):
+                 name="Autoencoder"):
         """
         Initialize a symmetric autoencoder.
 
@@ -405,7 +405,7 @@ class AutoEncoder:
         else:
             saver = None
 
-        print("---> Autoencoder structure:")
+        print("---> {0} structure:".format(self.name))
         for i, layer in enumerate(self.architecture):
             print("Layer {0}: {1} with size {2}.".format(
                 i, layer['layer'], layer['layer_size'])
@@ -416,7 +416,7 @@ class AutoEncoder:
 
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         print(
-            "---> Autoencoder training starts at {0}.".format(current_time)
+            "---> {0} training starts at {1}.".format(self.name, current_time)
         )
 
         try:
@@ -455,8 +455,8 @@ class AutoEncoder:
                         train_x.train.epochs_completed >= max_epochs:
                     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     print(
-                        "---> Autoencoder training ends at {0}.".format(
-                            current_time)
+                        "---> {0} training ends at {1}.".format(
+                            self.name, current_time)
                     )
                     print("Total steps: {0}".format(iteration))
                     print("Total epochs: {0}".format(
@@ -481,8 +481,9 @@ class AutoEncoder:
         except KeyboardInterrupt:
             current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             print(
-                "---> Autoencoder training interrupted at {0}.".format(
-                    current_time)
+                "---> {0} training interrupted at {1}.".format(
+                    self.name, current_time
+                )
             )
             print("Total steps: {0}".format(iteration))
             print("Total epochs: {0}".format(
