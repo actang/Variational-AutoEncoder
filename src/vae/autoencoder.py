@@ -114,9 +114,6 @@ class AutoEncoder:
             self.sesh = tf.Session()
         else:
             self.sesh = sesh
-        # Save to SummaryWriter for Tensorboard
-        self.logger = tf.train.SummaryWriter(self.LOG_FOLDER_NAME,
-                                             self.sesh.graph)
         # Make folders if not exist
         for directory in (self.LOG_FOLDER_NAME, self.MODEL_FOLDER_NAME,
                           self.PLOT_FOLDER_NAME):
@@ -377,7 +374,9 @@ class AutoEncoder:
 
         # Build autoencoder
         self._build_graph()
-
+        # Save to SummaryWriter for Tensorboard
+        self.logger = tf.train.SummaryWriter(self.LOG_FOLDER_NAME,
+                                             self.sesh.graph)
         if saver:
             saver = tf.train.Saver(tf.all_variables())
         else:
