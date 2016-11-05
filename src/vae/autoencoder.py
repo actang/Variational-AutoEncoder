@@ -3,7 +3,7 @@ from vae.loss import cross_entropy
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from datetime import datetime
-#from sklearn.manifold import TSNE
+from sklearn.manifold import TSNE
 import tensorflow as tf
 import numpy as np
 import os
@@ -423,12 +423,11 @@ class AutoEncoder:
                     self.plot_sample(x, x_reconstructed, sample=10, columns=5,
                                      name="testing",
                                      outdir=self.PLOT_FOLDER_NAME)
-                    # T-SNE seems buggy
-                    # names = ("train", "validation", "test")
-                    # datasets = (train_x.train, train_x.validation)
-                    # for name, dataset in zip(names, datasets):
-                    #     self.plot_latent(dataset.images, dataset.labels,
-                    #                      name=name)
+                    names = ("train", "validation", "test")
+                    datasets = (train_x.train, train_x.validation)
+                    for name, dataset in zip(names, datasets):
+                        self.plot_latent(dataset.images, dataset.labels,
+                                         name=name)
 
                 if iteration >= max_iter or \
                         train_x.train.epochs_completed >= max_epochs:
