@@ -13,6 +13,7 @@ model_architecture_cv = [
         'filter_size': [3, 3],
         'stride': [1, 1, 1, 1],
         'padding': 'SAME',
+        'dropout': 0.9,
     },
     {
         'layer': 'pooling',
@@ -25,11 +26,13 @@ model_architecture_cv = [
         'layer': 'fullyconnected',
         'layer_size': 200,
         'activation': tf.nn.elu,
+        'dropout': 0.9,
     },
     {
         'layer': 'fullyconnected',
         'layer_size': 10,
         'activation': tf.nn.elu,
+        'dropout': 1.0,
     },
 ]
 
@@ -37,7 +40,6 @@ v = AutoEncoder(input_size=[28, 28, 1],
                 architecture=model_architecture_cv,
                 batch_size=100,
                 learning_rate=1e-5,
-                dropout=1.0,
                 l2_reg=1e-5,
                 sesh=None,
                 name='cv_mnist_autoencoder',

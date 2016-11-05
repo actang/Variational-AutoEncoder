@@ -16,7 +16,7 @@ class AutoEncoder:
     PLOT_FOLDER_NAME = 'plots'
 
     def __init__(self, input_size, architecture, batch_size=128,
-                 learning_rate=1e-3, dropout=1.0, l2_reg=1e-5, sesh=None,
+                 learning_rate=1e-3, l2_reg=1e-5, sesh=None,
                  name="autoencoder"):
         """
         Initialize a symmetric autoencoder.
@@ -78,7 +78,6 @@ class AutoEncoder:
             ]
         :param batch_size: Batch size for each training cycle.
         :param learning_rate: Learning rate for updating gradients.
-        :param dropout: 1 - probability of dropout (1 means no dropout).
         :param l2_reg: l2 regularization lambda.
         :param sesh: A preloaded tensorflow session or None.
         :param name: A customized name for the object
@@ -88,8 +87,6 @@ class AutoEncoder:
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.name = name
-        self.dropout = tf.placeholder_with_default(dropout, shape=[],
-                                                   name="dropout")
         self.lambda_l2_reg = l2_reg
         # Tensorflow variable: latent space
         self.latent = None
@@ -114,6 +111,7 @@ class AutoEncoder:
             self.sesh = tf.Session()
         else:
             self.sesh = sesh
+        self.logger = None
         # Make folders if not exist
         for directory in (self.LOG_FOLDER_NAME, self.MODEL_FOLDER_NAME,
                           self.PLOT_FOLDER_NAME):
@@ -130,7 +128,7 @@ class AutoEncoder:
         """
         current_input = self.x
 
-        for i, layer in enumerate(self.architecture):
+        for i, layer in enumerate(self.architecture[:-1]):
             input_size = current_input.get_shape().as_list()
             current_layer = None
 
@@ -146,7 +144,7 @@ class AutoEncoder:
                     input_size=input_size[-1],
                     output_size=layer['layer_size'],
                     scope="convolution_layer_encoder_{0}".format(i),
-                    dropout=self.dropout,
+                    dropout=layer['dropout'],
                     activation=layer['activation'],
                     filter_size=layer['filter_size'],
                     stride=layer['stride'],
@@ -167,7 +165,7 @@ class AutoEncoder:
                     input_size=input_size[-1],
                     output_size=layer['layer_size'],
                     scope="fully_connected_layer_encoder_{0}".format(i),
-                    dropout=self.dropout,
+                    dropout=layer['dropout'],
                     activation=layer['activation']
                 )
             else:
@@ -180,13 +178,37 @@ class AutoEncoder:
 
         return current_input
 
-    def decoder(self):
+    def latent_space(self, pre_latent):
+        input_size = pre_latent.get_shape().as_list()
+
+        # flatten
+        if len(self.architecture) > 1 \
+                and self.architecture[-2]['layer'] != "fullyconnected":
+            filter_size = input_size[1] * input_size[2] * input_size[3]
+            input_size = [input_size[0], filter_size]
+            pre_latent = tf.reshape(pre_latent, input_size)
+
+        latent_layer = FullyConnectedLayer(
+            input_size=input_size[-1],
+            output_size=self.architecture[-1]['layer_size'],
+            scope="fully_connected_layer_encoder_latent",
+            dropout=self.architecture[-1]['dropout'],
+            activation=self.architecture[-1]['activation']
+        )
+
+        latent = latent_layer(pre_latent)
+        output_size = latent.get_shape().as_list()
+        self.shapes.append((input_size, output_size))
+
+        return latent
+
+    def decoder(self, latent):
         """
         Build an aggregate function for decoder.
 
         :return: decoder function
         """
-        current_output = self.latent
+        current_output = latent
 
         for i in reversed(range(len(self.architecture))):
             layer = self.architecture[i]
@@ -208,7 +230,7 @@ class AutoEncoder:
                     input_size=output_size,
                     output_size=input_size,
                     scope="convolution_layer_decoder_{0}".format(i),
-                    dropout=self.dropout,
+                    dropout=layer['dropout'],
                     activation=layer['activation'],
                     stride=layer['stride'],
                     padding=layer['padding'],
@@ -230,7 +252,7 @@ class AutoEncoder:
                     input_size=output_size[-1],
                     output_size=input_size[-1],
                     scope="fully_connected_layer_decoder_{0}".format(i),
-                    dropout=self.dropout,
+                    dropout=layer['dropout'],
                     activation=layer['activation']
                 )
             else:
@@ -240,20 +262,21 @@ class AutoEncoder:
 
         return current_output
 
-    def reconstruct_loss(self, x_reconstructed):
+    def reconstruct_loss(self):
         # Calculate reconstruction loss
-        rec_loss = cross_entropy(x_reconstructed, self.x)
+        rec_loss = cross_entropy(self.x_reconstructed, self.x)
         return rec_loss
 
     def _build_graph(self):
-        self.latent = self.encoder()
-        self.x_reconstructed = tf.identity(self.decoder(),
+        pre_latent = self.encoder()
+        self.latent = self.latent_space(pre_latent)
+        self.x_reconstructed = tf.identity(self.decoder(self.latent),
                                            name="x_reconstructed")
-        self.calculate_cost(self.x_reconstructed)
+        self.calculate_cost()
         self.optimization_function()
         self.sesh.run(tf.initialize_all_variables())
 
-    def calculate_cost(self, x_reconstructed):
+    def calculate_cost(self):
         with tf.name_scope("l2_regularization"):
             regularizers = [
                 tf.nn.l2_loss(var) for var in
@@ -263,8 +286,8 @@ class AutoEncoder:
             l2_reg = self.lambda_l2_reg * tf.add_n(regularizers)
         with tf.name_scope("total_cost"):
             # Average over minibatch
-            self.cost = tf.reduce_mean(self.reconstruct_loss(x_reconstructed),
-                                       name="vae_cost")
+            self.cost = tf.reduce_mean(self.reconstruct_loss(),
+                                       name="ae_cost")
             self.cost += l2_reg
 
     def optimization_function(self):
