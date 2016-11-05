@@ -3,7 +3,7 @@ from vae.loss import cross_entropy
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from datetime import datetime
-from sklearn.manifold import TSNE
+#from sklearn.manifold import TSNE
 import tensorflow as tf
 import numpy as np
 import os
@@ -134,12 +134,20 @@ class AutoEncoder:
         current_input = self.x
 
         for i, layer in enumerate(self.architecture):
-
             input_size = current_input.get_shape().as_list()
             current_layer = None
+
+            # flatten
+            if layer['layer'] == "fullyconnected" and i > 0 \
+                    and self.architecture[i - 1]['layer'] != "fullyconnected":
+                filter_size = input_size[1] * input_size[2] * input_size[3]
+                input_size = [input_size[0], filter_size]
+                current_input = tf.reshape(current_input, input_size)
+
             if layer['layer'] == "convolution":
                 current_layer = ConvolutionalLayer(
-                    size=layer['layer_size'],
+                    input_size=input_size[-1],
+                    output_size=layer['layer_size'],
                     scope="convolution_layer_encoder_{0}".format(i),
                     dropout=self.dropout,
                     activation=layer['activation'],
@@ -150,7 +158,7 @@ class AutoEncoder:
                 )
             elif layer['layer'] == "pooling":
                 current_layer = PoolingLayer(
-                    size=layer['layer_size'],
+                    output_size=layer['layer_size'],
                     scope="pooling_layer_encoder_{0}".format(i),
                     ksize=layer['pooling_len'],
                     stride=layer['stride'],
@@ -159,20 +167,14 @@ class AutoEncoder:
                 )
             elif layer['layer'] == "fullyconnected":
                 current_layer = FullyConnectedLayer(
-                    size=layer['layer_size'],
+                    input_size=input_size[-1],
+                    output_size=layer['layer_size'],
                     scope="fully_connected_layer_encoder_{0}".format(i),
                     dropout=self.dropout,
                     activation=layer['activation']
                 )
             else:
                 pass
-
-            # flatten
-            if layer['layer'] == "fullyconnected" and i >= 1 \
-                    and self.architecture[i - 1]['layer'] != "fullyconnected":
-                filter_size = input_size[1] * input_size[2] * input_size[3]
-                current_input = tf.reshape(current_input, [-1, filter_size])
-                input_size = [None, filter_size]
 
             current_input = current_layer(current_input)
             output_size = current_input.get_shape().as_list()
@@ -195,21 +197,30 @@ class AutoEncoder:
             output_size = self.shapes[i][1]
             current_layer = None
 
+            # Unflatten
+            if layer['layer'] != "fullyconnected" and \
+                i < len(self.architecture) - 1 and \
+                    self.architecture[i + 1]['layer'] == "fullyconnected":
+                batch_size = tf.shape(current_output)[0]
+                filter_size = output_size[1:]
+                output_size = [batch_size] + filter_size
+                current_output = tf.reshape(current_output, output_size)
+
             if layer['layer'] == "convolution":
                 current_layer = ConvolutionalLayer(
-                    size=input_size[-1],
+                    input_size=output_size,
+                    output_size=input_size,
                     scope="convolution_layer_decoder_{0}".format(i),
                     dropout=self.dropout,
                     activation=layer['activation'],
                     stride=layer['stride'],
                     padding=layer['padding'],
-                    output_size=input_size,
                     inverse=True
                 )
 
             elif layer['layer'] == "pooling":
                 current_layer = PoolingLayer(
-                    size=input_size[-1],
+                    output_size=input_size[-1],
                     scope="pooling_layer_decoder_{0}".format(i),
                     ksize=layer['pooling_len'],
                     stride=layer['stride'],
@@ -219,7 +230,8 @@ class AutoEncoder:
 
             elif layer['layer'] == "fullyconnected":
                 current_layer = FullyConnectedLayer(
-                    size=input_size[-1],
+                    input_size=output_size[-1],
+                    output_size=input_size[-1],
                     scope="fully_connected_layer_decoder_{0}".format(i),
                     dropout=self.dropout,
                     activation=layer['activation']
@@ -227,16 +239,8 @@ class AutoEncoder:
             else:
                 pass
 
-            # Unflatten
-            if layer['layer'] != "fullyconnected" and \
-                i < len(self.architecture) - 1 and \
-                    self.architecture[i + 1]['layer'] == "fullyconnected":
-                batch_size = [tf.shape(current_output)[0]]
-                filter_size = output_size[1:]
-                current_output = tf.reshape(current_output,
-                                            batch_size + filter_size)
-
             current_output = current_layer(current_output)
+
         return current_output
 
     def reconstruct_loss(self, x_reconstructed):
