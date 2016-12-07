@@ -153,8 +153,8 @@ with tf.name_scope("vae"):
         FLAGS.vae_learning_rate,
         epsilon=1.0
     ).minimize(
-        loss = vae_loss,
-        var_list= tf.get_collection(
+        loss=vae_loss,
+        var_list=tf.get_collection(
             tf.GraphKeys.TRAINABLE_VARIABLES,
             scope="vae"
         )
@@ -171,14 +171,14 @@ def construct_lenet(lenet_images, lenet_labels):
         with pt.defaults_scope(activation_fn=tf.nn.relu, l2loss=0.00001):
             return (
                 images
-                    .conv2d(5, 20)
-                    .max_pool(2, 2)
-                    .conv2d(5, 50)
-                    .max_pool(2, 2)
-                    .flatten()
-                    .fully_connected(500)
-                    .softmax_classifier(FLAGS.image_num_categories,
-                                        lenet_labels)
+                .conv2d(5, 20)
+                .max_pool(2, 2)
+                .conv2d(5, 50)
+                .max_pool(2, 2)
+                .flatten()
+                .fully_connected(500)
+                .softmax_classifier(FLAGS.image_num_categories,
+                                    lenet_labels)
             )
 
 with tf.name_scope("classifier"):
@@ -229,7 +229,7 @@ with tf.name_scope("classifier"):
 
 
 if not os.path.isfile(meta_model_path):
-    init = tf.initialize_all_variables()
+    init = tf.global_variables_initializer()
     classifier_train_updates_per_epoch = \
         dataset.train.num_examples // FLAGS.classifier_batch_size
     classifier_test_updates_per_epoch = \

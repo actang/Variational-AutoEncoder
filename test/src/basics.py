@@ -56,7 +56,7 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_integer(
     "classifier_max_epochs",
-    1,
+    50,
     "max epochs to train the classifier"
 )
 flags.DEFINE_float(
@@ -85,7 +85,7 @@ flags.DEFINE_float(
 )
 flags.DEFINE_integer(
     "vae_max_epochs",
-    1,
+    50,
     "max epochs to train the VAE"
 )
 ###################
