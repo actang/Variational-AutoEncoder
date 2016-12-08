@@ -83,7 +83,7 @@ def naive_decoder(z=None):
                    .deconv2d(5, 32, stride=2)
                    .deconv2d(5, FLAGS.image_channel, stride=2,
                              activation_fn=tf.nn.sigmoid)
-               ).tensor, mean, stddev
+               ).tensor, input_sample, mean, stddev
 
 
 def get_vae_cost(mean, stddev, epsilon=1e-8):
@@ -125,8 +125,9 @@ with tf.name_scope("vae"):
         # Use naive autoencoder
         with pt.defaults_scope(phase=pt.Phase.train):
             with tf.variable_scope("vae_model"):
-                vae_z = naive_encoder(vae_images_placeholder)
-                vae_x_, vae_z_mean, vae_z_std = naive_decoder(vae_z)
+                vae_x_, vae_z, vae_z_mean, vae_z_std = naive_decoder(
+                    naive_encoder(vae_images_placeholder)
+                )
         with pt.defaults_scope(phase=pt.Phase.test):
             with tf.variable_scope("vae_model", reuse=True):
                 vae_sampled_x_ = naive_decoder()[0]
@@ -395,7 +396,7 @@ training_images, true_labels = dataset.train.next_batch(
 
 false_labels = np.zeros_like(true_labels)
 for i in range(false_labels.shape[0]):
-    false_labels[i][FLAGS.adjust_target_class - 1] = 1
+    false_labels[i][FLAGS.adjust_target_class] = 1
 
 ##################
 # Fooling Images #
