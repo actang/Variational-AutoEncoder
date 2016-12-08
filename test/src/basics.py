@@ -38,7 +38,7 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_integer(
     "image_channel",
-    1,
+    50,
     "number of color channels of the input image"
 )
 flags.DEFINE_integer(
@@ -85,7 +85,7 @@ flags.DEFINE_float(
 )
 flags.DEFINE_integer(
     "vae_max_epochs",
-    50,
+    1,
     "max epochs to train the VAE"
 )
 ###################

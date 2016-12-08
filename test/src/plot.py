@@ -148,8 +148,8 @@ def vae_plot_reconstructed(FLAGS, target_images, reconstructed_images,
     plt.close()
 
 
-def plot_fooling_images(FLAGS, sampled_images, current_iteration, title,
-                        ncol=6):
+def plot_all_images(FLAGS, sampled_images, current_iteration, theme, title,
+                    ncol=6):
     sampled_canvas = np.zeros(
         (
             FLAGS.image_height * ncol,
@@ -178,7 +178,8 @@ def plot_fooling_images(FLAGS, sampled_images, current_iteration, title,
         plt.imshow(sampled_canvas, cmap="gray")
     else:
         plt.imshow(sampled_canvas)
-    plt.title('Fooling Images from {0} at Iteration {1} ({2})'.format(
+    plt.title('{0} Images from {1} at Iteration {2} ({3})'.format(
+        theme,
         FLAGS.dataset_name,
         current_iteration,
         title
@@ -186,8 +187,9 @@ def plot_fooling_images(FLAGS, sampled_images, current_iteration, title,
     plt.savefig(
         os.path.join(
             FLAGS.figures_path,
-            "{0}_fooling_iteration_{1}_{2}.png".format(
+            "{0}_{1}_iteration_{2}_{3}.png".format(
                 FLAGS.dataset_name,
+                theme,
                 current_iteration,
                 title
             )

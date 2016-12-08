@@ -5,7 +5,7 @@ import tensorflow as tf
 from deconv import deconv2d
 from tqdm import trange
 from plot import dataset_sample_plot, vae_plot_sampled, vae_plot_reconstructed, \
-    plot_fooling_images
+    plot_all_images
 from basics import FLAGS
 import numpy as np
 
@@ -148,9 +148,20 @@ with tf.name_scope("vae"):
         ]
     )
 
+    vae_x_grad = tf.placeholder(
+        tf.float32,
+        [
+            FLAGS.vae_batch_size,
+            FLAGS.image_height,
+            FLAGS.image_width,
+            FLAGS.image_channel
+        ]
+    )
+
     vae_z_grad = tf.gradients(
         ys=vae_x_,
-        xs=[vae_z]
+        xs=[vae_z],
+        grad_ys=vae_x_grad
     )[0]
 
     vae_optimizer = tf.train.AdamOptimizer(
@@ -378,41 +389,96 @@ if not meta_model_exist_flag:
         )
 
 
+training_images, true_labels = dataset.train.next_batch(
+    FLAGS.classifier_batch_size
+)
+
+false_labels = np.zeros_like(true_labels)
+for i in range(false_labels.shape[0]):
+    false_labels[i][FLAGS.adjust_target_class - 1] = 1
+
 ##################
 # Fooling Images #
 ##################
+# with tf.Session() as sess:
+#     saver = tf.train.Saver()
+#     saver.restore(sess, meta_model_path)
+#     fooling_images_training_images = training_images.copy()
+#     for t in trange(
+#             FLAGS.adjust_total_iterations,
+#             desc="Number of Iterations to Generate Fooling Images",
+#             leave=False
+#     ):
+#         fooling_image_grads, fooling_image_scores = sess.run(
+#             fetches=[
+#                 classifier_grads,
+#                 classifier_result.softmax
+#             ],
+#             feed_dict={
+#                 classifier_images_placeholder: fooling_images_training_images,
+#                 classifier_labels_placeholder: false_labels
+#             }
+#         )
+#
+#         if t % 100 == 0:
+#             plot_all_images(FLAGS, fooling_images_training_images, t,
+#                             theme="fooling", title="reconstructed")
+#             plot_all_images(FLAGS, fooling_image_grads, t,
+#                             theme="fooling", title="gradients")
+#
+#         fooling_images_training_images += FLAGS.adjust_rate * \
+#                                           fooling_image_grads
+#
+
+#####################
+# Image Transformer #
+#####################
 with tf.Session() as sess:
     saver = tf.train.Saver()
     saver.restore(sess, meta_model_path)
-
-    training_images, true_labels = dataset.train.next_batch(
-        FLAGS.classifier_batch_size
-    )
-
-    false_labels = np.zeros_like(true_labels)
-    for i in range(false_labels.shape[0]):
-        false_labels[i][FLAGS.adjust_target_class - 1] = 1
-
+    transformer_training_images = training_images.copy()
+    # compute local z as a starting point
+    transformer_z_loc = sess.run(
+        fetches=[vae_z],
+        feed_dict={
+            vae_images_placeholder: transformer_training_images
+        }
+    )[0]
     for t in trange(
             FLAGS.adjust_total_iterations,
-            desc="Number of Iterations to Generate Fooling Images",
+            desc="Number of Iterations to Generate Transform Images",
             leave=False
     ):
-        fooling_image_grads, fooling_image_scores = sess.run(
+        transformer_reconstructed_images = sess.run(
             fetches=[
-                classifier_grads,
-                classifier_result.softmax
+                vae_x_,
             ],
             feed_dict={
-                classifier_images_placeholder: training_images,
+                vae_z: transformer_z_loc,
+            }
+        )[0]
+        transformer_image_grads = sess.run(
+            fetches=[
+                classifier_grads,
+            ],
+            feed_dict={
+                classifier_images_placeholder: transformer_reconstructed_images,
                 classifier_labels_placeholder: false_labels
             }
-        )
+        )[0]
+        transformer_z_grads = sess.run(
+            fetches=[
+                vae_z_grad
+            ],
+            feed_dict={
+                vae_x_grad: transformer_image_grads,
+                vae_x_: transformer_reconstructed_images,
+                vae_z: transformer_z_loc
+            }
+        )[0]
 
         if t % 100 == 0:
-            plot_fooling_images(FLAGS, training_images, t,
-                                title="reconstructed")
-            plot_fooling_images(FLAGS, fooling_image_grads, t,
-                                title="gradients")
+            plot_all_images(FLAGS, transformer_reconstructed_images, t,
+                            theme="transformer", title="reconstructed")
 
-        training_images += FLAGS.adjust_rate * fooling_image_grads
+        transformer_z_loc += FLAGS.adjust_rate * transformer_z_grads
