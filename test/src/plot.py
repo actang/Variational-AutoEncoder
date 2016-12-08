@@ -143,3 +143,50 @@ def vae_plot_reconstructed(FLAGS, target_images, reconstructed_images,
             )
         )
     )
+
+
+def plot_fooling_images(FLAGS, sampled_images, current_iteration, title,
+                        ncol=6):
+    sampled_canvas = np.zeros(
+        (
+            FLAGS.image_height * ncol,
+            FLAGS.image_width * ncol,
+            FLAGS.image_channel
+        )
+    )
+    for row_idx in range(ncol):
+        for colume_idx in range(ncol):
+            sampled_canvas[
+                row_idx * FLAGS.image_height:
+                (row_idx + 1) * FLAGS.image_height,
+                colume_idx * FLAGS.image_width:
+                (colume_idx + 1) * FLAGS.image_width,
+                :] = sampled_images[
+                    row_idx * ncol + colume_idx
+                ].reshape(
+                    FLAGS.image_height,
+                    FLAGS.image_width,
+                    FLAGS.image_channel
+                )
+    plt.figure(figsize=(7, 7))
+    plt.axis('off')
+    if sampled_canvas.shape[2] == 1:
+        sampled_canvas = sampled_canvas[:, :, 0]
+        plt.imshow(sampled_canvas, cmap="gray")
+    else:
+        plt.imshow(sampled_canvas)
+    plt.title('Fooling Images from {0} at Iteration {1} ({2})'.format(
+        FLAGS.dataset_name,
+        current_iteration,
+        title
+    ))
+    plt.savefig(
+        os.path.join(
+            FLAGS.figures_path,
+            "{0}_fooling_iteration_{1}_{2}.png".format(
+                FLAGS.dataset_name,
+                current_iteration,
+                title
+            )
+        )
+    )

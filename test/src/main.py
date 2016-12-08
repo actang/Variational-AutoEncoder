@@ -4,19 +4,23 @@ import prettytensor as pt
 import tensorflow as tf
 from deconv import deconv2d
 from tqdm import trange
-from plot import dataset_sample_plot, vae_plot_sampled, vae_plot_reconstructed
+from plot import dataset_sample_plot, vae_plot_sampled, vae_plot_reconstructed, \
+    plot_fooling_images
 from basics import FLAGS
+import numpy as np
 
 logging = tf.logging
+meta_model_name = "{0}_{1}_{2}_epochs_{3}_{4}_epochs.ckpt".format(
+    FLAGS.dataset_name,
+    FLAGS.vae_name,
+    FLAGS.vae_max_epochs,
+    FLAGS.classifier_name,
+    FLAGS.classifier_max_epochs
+)
+
 meta_model_path = os.path.join(
     FLAGS.model_path,
-    "{0}_{1}_{2}_epochs_{3}_{4}_epochs.ckpt".format(
-        FLAGS.dataset_name,
-        FLAGS.vae_name,
-        FLAGS.vae_max_epochs,
-        FLAGS.classifier_name,
-        FLAGS.classifier_max_epochs
-    )
+    meta_model_name
 )
 
 ##################
@@ -204,7 +208,7 @@ with tf.name_scope("classifier"):
         classifier_labels_placeholder
     )
     classifier_grads = tf.gradients(
-        ys=classifier_result.softmax,
+        ys=classifier_result.loss,
         xs=[classifier_images_placeholder]
     )[0]
     classifier_accuracy = tf.reduce_mean(
@@ -227,9 +231,13 @@ with tf.name_scope("classifier"):
         )
     )
 
+meta_model_exist_flag = False
+for f in os.listdir(FLAGS.model_path):
+    if meta_model_name in f:
+        meta_model_exist_flag = True
 
-if not os.path.isfile(meta_model_path):
-    init = tf.global_variables_initializer()
+if not meta_model_exist_flag:
+    init = tf.initialize_all_variables()
     classifier_train_updates_per_epoch = \
         dataset.train.num_examples // FLAGS.classifier_batch_size
     classifier_test_updates_per_epoch = \
@@ -238,7 +246,6 @@ if not os.path.isfile(meta_model_path):
         dataset.train.num_examples // FLAGS.vae_batch_size
 
     with tf.Session() as sess:
-        saver = tf.train.Saver()
         sess.run(init)
         ####################
         # Train Classifier #
@@ -365,36 +372,47 @@ if not os.path.isfile(meta_model_path):
                 epoch
             )
 
-        save_path = saver.save(
+        save_path = tf.train.Saver().save(
             sess,
             meta_model_path
         )
 
-#
-# ##################
-# # Fooling Images #
-# ##################
-# with tf.Session() as sess:
-#     saver = tf.train.Saver()
-#     saver.restore(sess, meta_model_path)
 
+##################
+# Fooling Images #
+##################
+with tf.Session() as sess:
+    saver = tf.train.Saver()
+    saver.restore(sess, meta_model_path)
 
-#     image = np.array(im)
-#     for t in range(1000):
-#         # Do some work with the model
-#         feed_dic = {lenet_eval_data: image[np.newaxis, :],
-#                     lenet_eval_labels: [target]}
-#         proba, grad_scores = sess.run(
-#             [lenet_eval_prediction, lenet_eval_saliency_grad],
-#             feed_dict=feed_dic)
-#         image += epsilon * grad_scores[0]
-#         if t % 100 == 0:
-#             plt.clf()
-#             plt.axis('off')
-#             plt.imshow(image[:, :, 0], cmap='gray')
-#             plt.show()
-#         if proba[0, lab] < proba[0, target]:
-#             break
-#
-#     print
-#     "POriginal:", proba[0, lab], "PTarget:", proba[0, target]
+    training_images, true_labels = dataset.train.next_batch(
+        FLAGS.classifier_batch_size
+    )
+
+    false_labels = np.zeros_like(true_labels)
+    for i in range(false_labels.shape[0]):
+        false_labels[i][FLAGS.adjust_target_class - 1] = 1
+
+    for t in trange(
+            FLAGS.adjust_total_iterations,
+            desc="Number of Iterations to Generate Fooling Images",
+            leave=False
+    ):
+        fooling_image_grads, fooling_image_scores = sess.run(
+            fetches=[
+                classifier_grads,
+                classifier_result.softmax
+            ],
+            feed_dict={
+                classifier_images_placeholder: training_images,
+                classifier_labels_placeholder: false_labels
+            }
+        )
+
+        if t % 100 == 0:
+            plot_fooling_images(FLAGS, training_images, t,
+                                title="reconstructed")
+            plot_fooling_images(FLAGS, fooling_image_grads, t,
+                                title="gradients")
+
+        training_images += FLAGS.adjust_rate * fooling_image_grads

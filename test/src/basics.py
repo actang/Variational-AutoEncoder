@@ -108,6 +108,25 @@ flags.DEFINE_string(
 )
 
 ######################
+# Adjust Information #
+######################
+flags.DEFINE_integer(
+    "adjust_total_iterations",
+    1000,
+    "total iterations to back propagate gradients to input images"
+)
+flags.DEFINE_integer(
+    "adjust_target_class",
+    6,
+    "target class to change the input images to"
+)
+flags.DEFINE_integer(
+    "adjust_rate",
+    1e-3,
+    "adjust rate to apply gradients to the input images"
+)
+
+######################
 # Unused Information #
 ######################
 flags.DEFINE_integer(
