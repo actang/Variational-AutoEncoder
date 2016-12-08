@@ -122,7 +122,7 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_integer(
     "adjust_rate",
-    1e-3,
+    1e-4,
     "adjust rate to apply gradients to the input images"
 )
 

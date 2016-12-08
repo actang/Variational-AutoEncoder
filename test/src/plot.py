@@ -43,6 +43,7 @@ def dataset_sample_plot(FLAGS, dataset, ncol=10):
             "{}_sample_plots.png".format(FLAGS.dataset_name)
         )
     )
+    plt.close()
 
 
 def vae_plot_sampled(FLAGS, sampled_images, current_epoch, ncol=6):
@@ -85,6 +86,7 @@ def vae_plot_sampled(FLAGS, sampled_images, current_epoch, ncol=6):
             )
         )
     )
+    plt.close()
 
 
 def vae_plot_reconstructed(FLAGS, target_images, reconstructed_images,
@@ -143,6 +145,7 @@ def vae_plot_reconstructed(FLAGS, target_images, reconstructed_images,
             )
         )
     )
+    plt.close()
 
 
 def plot_fooling_images(FLAGS, sampled_images, current_iteration, title,
@@ -190,3 +193,4 @@ def plot_fooling_images(FLAGS, sampled_images, current_iteration, title,
             )
         )
     )
+    plt.close()
